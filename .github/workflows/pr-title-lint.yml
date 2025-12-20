@@ -1,13 +1,8 @@
 name: PR Title Lint
 
 on:
-  pull_request:
-    types:
-      - opened
-      - edited
-      - synchronize
-    branches:
-      - canary
+  # Manual trigger only
+  workflow_dispatch:
 
 permissions:
   contents: read
