@@ -55,13 +55,18 @@ export function bindTextStream(
         return;
       }
       try {
-        const parsed = StreamObjectSchema.safeParse(JSON.parse(data));
+        const jsonData = JSON.parse(data);
+        const parsed = StreamObjectSchema.safeParse(jsonData);
         if (parsed.success) {
           answer.streamObjects = mergeStreamObjects([
             ...(answer.streamObjects ?? []),
             parsed.data,
           ]);
+        } else if (typeof jsonData === 'object' && 'text' in jsonData) {
+          // Handle LiteLLM/OpenAI compatible {"text": "..."} format
+          answer.content += jsonData.text;
         } else {
+          // Unknown JSON format, append as-is
           answer.content += data;
         }
       } catch {

@@ -503,7 +503,10 @@ export class OpenAIProvider extends CopilotProvider<OpenAIConfig> {
         .counter('chat_object_stream_calls')
         .add(1, { model: model.id });
       const fullStream = await this.getFullStream(model, messages, options);
-      const parser = new StreamObjectParser();
+      // Pass includeReasoning to parser - only show reasoning when explicitly enabled
+      const parser = new StreamObjectParser({
+        includeReasoning: options.reasoning ?? false,
+      });
       for await (const chunk of fullStream) {
         const result = parser.parse(chunk);
         if (result) {

@@ -78,16 +78,15 @@ export class CopilotProviderFactory {
 
   /**
    * Get all available models from all registered providers.
-   * Includes both hardcoded models and dynamically loaded online models.
+   * Only includes dynamically loaded online models for enterprise-grade single source of truth.
    */
   getAvailableModels(): string[] {
     const models: string[] = [];
     for (const [, provider] of this.#providers.entries()) {
       if (provider.configured()) {
-        // Add dynamically loaded models from onlineModelList
+        // Only add dynamically loaded models from onlineModelList
+        // Do NOT add hardcoded models - use single source of truth
         models.push(...provider.onlineModelList);
-        // Add hardcoded models from the provider
-        models.push(...provider.models.map(m => m.id));
       }
     }
     // Deduplicate

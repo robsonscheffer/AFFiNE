@@ -27,6 +27,7 @@ import {
   WebIcon,
 } from '@blocksuite/icons/lit';
 import { ShadowlessElement } from '@blocksuite/std';
+import { autoPlacement, offset, shift } from '@floating-ui/dom';
 import { computed } from '@preact/signals-core';
 import { css, html } from 'lit';
 import { property } from 'lit/decorators.js';
@@ -84,6 +85,11 @@ export class ChatInputPreference extends SignalWatcher(
       color: ${unsafeCSSVarV2('text/tertiary')};
       line-height: 20px;
       margin-right: 40px;
+    }
+    /* Ensure model submenu body is scrollable for long model lists */
+    affine-menu .affine-menu-body {
+      overflow-y: auto;
+      max-height: 400px;
     }
   `;
 
@@ -157,6 +163,20 @@ export class ChatInputPreference extends SignalWatcher(
         postfix: html`
           <span class="ai-active-model-name"> ${this.model.value?.name} </span>
         `,
+        // Use custom middleware with smaller offset (4px) to prevent mouse-out issues
+        // when moving from trigger to submenu options
+        middleware: [
+          autoPlacement({
+            allowedPlacements: [
+              'right-start',
+              'right-end',
+              'left-start',
+              'left-end',
+            ],
+          }),
+          offset({ mainAxis: 4, crossAxis: 0 }),
+          shift({ crossAxis: true }),
+        ],
         options: {
           items: this.aiModelService.models.value.map(model => {
             const isSelected = model.id === this.model.value?.id;
