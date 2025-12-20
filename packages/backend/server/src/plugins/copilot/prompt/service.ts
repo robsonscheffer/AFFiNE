@@ -46,27 +46,31 @@ export class PromptService implements OnApplicationBootstrap {
 
   protected async setup(scenarios?: CopilotPromptScenario) {
     if (!!scenarios && scenarios.override_enabled && scenarios.scenarios) {
-      this.logger.log('Updating prompts based on scenarios...');
+      this.logger.log(
+        'Updating prompts based on scenarios (config.json is source of truth)...'
+      );
       for (const [scenario, model] of Object.entries(scenarios.scenarios)) {
         const promptNames = Scenario[scenario as keyof typeof Scenario] || [];
         if (!promptNames.length) continue;
         for (const name of promptNames) {
           const prompt = prompts.find(p => p.name === name);
           if (prompt && model) {
-            await this.update(
-              prompt.name,
-              { model, modified: true },
-              { model: { not: model } }
-            );
+            // Always update the model from config - config.json is the source of truth
+            // Remove the WHERE condition so we always overwrite with config values
+            await this.update(prompt.name, { model, modified: true });
           }
         }
       }
+      // Clear entire cache after all updates to ensure fresh data
+      this.cache.clear();
+      this.logger.log('Scenario model overrides applied from config.json');
     } else {
       this.logger.log('No scenarios enabled, using default prompts.');
       const prompts = Object.values(Scenario).flat();
       for (const prompt of prompts) {
         await this.update(prompt, { modified: false });
       }
+      this.cache.clear();
     }
   }
 
