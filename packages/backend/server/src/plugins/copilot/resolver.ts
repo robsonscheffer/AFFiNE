@@ -481,11 +481,26 @@ export class CopilotResolver {
     if (!prompt) {
       throw new NotFoundException('Prompt not found');
     }
-    const convertModels = (ids: string[]) => {
-      return ids
-        .map(id => ({ id, name: this.modelNames.get(id) }))
-        .filter(m => !!m.name) as CopilotModelType[];
+
+    // Convert model IDs to model objects, using ID as fallback name for dynamic models
+    const convertModels = (ids: string[]): CopilotModelType[] => {
+      return ids.map(id => ({
+        id,
+        name: this.modelNames.get(id) || id, // Use ID as fallback for dynamic models
+      }));
     };
+
+    // Selfhosted mode: Use all available models from all providers dynamically
+    if (env.selfhosted) {
+      const availableModels = this.providerFactory.getAvailableModels();
+      return {
+        defaultModel: prompt.model,
+        optionalModels: convertModels(availableModels),
+        proModels: [], // No subscription required in selfhosted mode
+      };
+    }
+
+    // Cloud mode: Use hardcoded optionalModels and proModels
     const proModels = prompt.config?.proModels || [];
     const missing = new Set(
       [...prompt.optionalModels, ...proModels].filter(

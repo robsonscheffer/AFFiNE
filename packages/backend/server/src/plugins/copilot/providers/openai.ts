@@ -378,7 +378,7 @@ export class OpenAIProvider extends CopilotProvider<OpenAIConfig> {
         })
           .then(r => r.json())
           .then(r => ModelListSchema.parse(r));
-        this.onlineModelList = data.map(model => model.id);
+        this._onlineModelList = data.map(model => model.id);
       }
     } catch (e) {
       this.logger.error('Failed to fetch available models', e);

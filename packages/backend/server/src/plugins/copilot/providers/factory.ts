@@ -75,4 +75,22 @@ export class CopilotProviderFactory {
       this.server.disableFeature(ServerFeature.Copilot);
     }
   }
+
+  /**
+   * Get all available models from all registered providers.
+   * Includes both hardcoded models and dynamically loaded online models.
+   */
+  getAvailableModels(): string[] {
+    const models: string[] = [];
+    for (const [, provider] of this.#providers.entries()) {
+      if (provider.configured()) {
+        // Add dynamically loaded models from onlineModelList
+        models.push(...provider.onlineModelList);
+        // Add hardcoded models from the provider
+        models.push(...provider.models.map(m => m.id));
+      }
+    }
+    // Deduplicate
+    return [...new Set(models)];
+  }
 }

@@ -161,10 +161,10 @@ export class ChatInputPreference extends SignalWatcher(
           items: this.aiModelService.models.value.map(model => {
             const isSelected = model.id === this.model.value?.id;
             const isSelfHosted =
-              this.serverService.server.config$.value?.type ===
+              this.serverService?.server?.config$.value?.type ===
               ServerDeploymentType.Selfhosted;
             const status =
-              this.subscriptionService.subscription.ai$.value?.status;
+              this.subscriptionService?.subscription?.ai$.value?.status;
             const isSubscribed = status === SubscriptionStatus.Active;
             return menu.action({
               name: model.category,
