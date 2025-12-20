@@ -743,15 +743,30 @@ export class AIChatInput extends SignalWatcher(
         const last = messages.at(-1);
         if (last && isChatMessage(last)) {
           try {
-            const parsed = StreamObjectSchema.parse(JSON.parse(text));
-            const streamObjects = mergeStreamObjects([
-              ...(last.streamObjects ?? []),
-              parsed,
-            ]);
-            messages[messages.length - 1] = {
-              ...last,
-              streamObjects,
-            };
+            const jsonData = JSON.parse(text);
+            const parsed = StreamObjectSchema.safeParse(jsonData);
+            if (parsed.success) {
+              const streamObjects = mergeStreamObjects([
+                ...(last.streamObjects ?? []),
+                parsed.data,
+              ]);
+              messages[messages.length - 1] = {
+                ...last,
+                streamObjects,
+              };
+            } else if (typeof jsonData === 'object' && 'text' in jsonData) {
+              // Handle LiteLLM/OpenAI compatible {"text": "..."} format
+              messages[messages.length - 1] = {
+                ...last,
+                content: last.content + jsonData.text,
+              };
+            } else {
+              // Unknown JSON format, append as-is
+              messages[messages.length - 1] = {
+                ...last,
+                content: last.content + text,
+              };
+            }
           } catch {
             messages[messages.length - 1] = {
               ...last,

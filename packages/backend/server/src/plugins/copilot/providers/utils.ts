@@ -400,6 +400,23 @@ type DocEditFootnote = {
   intent: string;
   result: string;
 };
+
+/**
+ * Extract text from JSON-wrapped responses like {"text": "..."}
+ * This handles LiteLLM/OpenAI compatible responses that wrap content in JSON
+ */
+export function extractTextFromJson(text: string): string {
+  try {
+    const parsed = JSON.parse(text);
+    if (typeof parsed === 'object' && parsed !== null && 'text' in parsed) {
+      return parsed.text;
+    }
+  } catch {
+    // Not valid JSON, return original text
+  }
+  return text;
+}
+
 export class TextStreamParser {
   private readonly logger = new Logger(TextStreamParser.name);
   private readonly CALLOUT_PREFIX = '\n[!]\n';
@@ -417,12 +434,12 @@ export class TextStreamParser {
         if (!this.prefix) {
           this.resetPrefix();
         }
-        result = chunk.text;
+        result = extractTextFromJson(chunk.text);
         result = this.addNewline(chunk.type, result);
         break;
       }
       case 'reasoning-delta': {
-        result = chunk.text;
+        result = extractTextFromJson(chunk.text);
         result = this.addPrefix(result);
         result = this.markAsCallout(result);
         break;
@@ -596,13 +613,25 @@ export class TextStreamParser {
 }
 
 export class StreamObjectParser {
+  private readonly includeReasoning: boolean;
+
+  constructor(options: { includeReasoning?: boolean } = {}) {
+    this.includeReasoning = options.includeReasoning ?? true;
+  }
+
   public parse(chunk: TextStreamPart<CustomAITools>) {
     switch (chunk.type) {
       case 'reasoning-delta': {
-        return { type: 'reasoning' as const, textDelta: chunk.text };
+        // Skip reasoning content if not explicitly enabled
+        if (!this.includeReasoning) {
+          return null;
+        }
+        const textDelta = extractTextFromJson(chunk.text);
+        return { type: 'reasoning' as const, textDelta };
       }
       case 'text-delta': {
-        const { type, text: textDelta } = chunk;
+        const { type } = chunk;
+        const textDelta = extractTextFromJson(chunk.text);
         return { type, textDelta };
       }
       case 'tool-call':
