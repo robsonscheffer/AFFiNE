@@ -1,30 +1,29 @@
 name: Release
 
 on:
-  schedule:
-    - cron: '0 9 * * *'
-
+  # Manual trigger only - no automatic runs
   workflow_dispatch:
     inputs:
       web:
-        description: 'Release Web?'
+        description: 'Release Web/Server?'
         required: true
         type: boolean
-        default: false
-      desktop:
-        description: 'Release Desktop?'
-        required: true
-        type: boolean
-        default: false
-      mobile:
-        description: 'Release Mobile?'
-        required: true
-        type: boolean
-        default: false
-      ios-app-version:
-        description: 'iOS App Store Version (Optional, use tag version if empty)'
-        required: false
-        type: string
+        default: true
+      # Desktop and Mobile inputs disabled - jobs are commented out
+      # desktop:
+      #   description: 'Release Desktop?'
+      #   required: true
+      #   type: boolean
+      #   default: false
+      # mobile:
+      #   description: 'Release Mobile?'
+      #   required: true
+      #   type: boolean
+      #   default: false
+      # ios-app-version:
+      #   description: 'iOS App Store Version (Optional, use tag version if empty)'
+      #   required: false
+      #   type: string
 
 permissions:
   contents: write
@@ -52,7 +51,7 @@ jobs:
 
   cloud:
     name: Release Cloud
-    if: ${{ inputs.web || github.event_name != 'workflow_dispatch' }}
+    if: ${{ inputs.web }}
     needs:
       - prepare
     uses: ./.github/workflows/release-cloud.yml
@@ -85,27 +84,28 @@ jobs:
           docker buildx imagetools create --tag ghcr.io/${IMAGE_NAME}:${{needs.prepare.outputs.BUILD_TYPE}} ghcr.io/${IMAGE_NAME}:${{needs.prepare.outputs.BUILD_TYPE}}-${{needs.prepare.outputs.GIT_SHORT_HASH}}
           docker buildx imagetools create --tag ghcr.io/${IMAGE_NAME}:${{needs.prepare.outputs.APP_VERSION}} ghcr.io/${IMAGE_NAME}:${{needs.prepare.outputs.BUILD_TYPE}}-${{needs.prepare.outputs.GIT_SHORT_HASH}}
 
-  desktop:
-    name: Release Desktop
-    if: ${{ inputs.desktop || github.event_name != 'workflow_dispatch' }}
-    needs:
-      - prepare
-    uses: ./.github/workflows/release-desktop.yml
-    secrets: inherit
-    with:
-      build-type: ${{ needs.prepare.outputs.BUILD_TYPE }}
-      app-version: ${{ needs.prepare.outputs.APP_VERSION }}
-      git-short-hash: ${{ needs.prepare.outputs.GIT_SHORT_HASH }}
+  # Desktop and Mobile releases disabled for selfhosted deployment - saves build time
+  # desktop:
+  #   name: Release Desktop
+  #   if: ${{ inputs.desktop }}
+  #   needs:
+  #     - prepare
+  #   uses: ./.github/workflows/release-desktop.yml
+  #   secrets: inherit
+  #   with:
+  #     build-type: ${{ needs.prepare.outputs.BUILD_TYPE }}
+  #     app-version: ${{ needs.prepare.outputs.APP_VERSION }}
+  #     git-short-hash: ${{ needs.prepare.outputs.GIT_SHORT_HASH }}
 
-  mobile:
-    name: Release Mobile
-    if: ${{ inputs.mobile }}
-    needs:
-      - prepare
-    uses: ./.github/workflows/release-mobile.yml
-    secrets: inherit
-    with:
-      build-type: ${{ needs.prepare.outputs.BUILD_TYPE }}
-      app-version: ${{ needs.prepare.outputs.APP_VERSION }}
-      git-short-hash: ${{ needs.prepare.outputs.GIT_SHORT_HASH }}
-      ios-app-version: ${{ inputs.ios-app-version }}
+  # mobile:
+  #   name: Release Mobile
+  #   if: ${{ inputs.mobile }}
+  #   needs:
+  #     - prepare
+  #   uses: ./.github/workflows/release-mobile.yml
+  #   secrets: inherit
+  #   with:
+  #     build-type: ${{ needs.prepare.outputs.BUILD_TYPE }}
+  #     app-version: ${{ needs.prepare.outputs.APP_VERSION }}
+  #     git-short-hash: ${{ needs.prepare.outputs.GIT_SHORT_HASH }}
+  #     ios-app-version: ${{ inputs.ios-app-version }}

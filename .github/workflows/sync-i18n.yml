@@ -1,11 +1,7 @@
 name: Sync I18n with Crowdin
 
 on:
-  push:
-    branches:
-      - canary
-    paths:
-      - 'packages/frontend/i18n/**'
+  # Manual trigger only
   workflow_dispatch:
 
 jobs:

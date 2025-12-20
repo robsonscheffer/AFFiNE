@@ -1,11 +1,7 @@
 name: Copilot Test Automatically
 
 on:
-  push:
-    tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+-canary.[0-9]+'
-  schedule:
-    - cron: '0 8 * * *'
+  # Manual trigger only
   workflow_dispatch:
 
 permissions:
