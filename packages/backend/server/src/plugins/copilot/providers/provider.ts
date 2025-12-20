@@ -56,10 +56,15 @@ import {
 export abstract class CopilotProvider<C = any> {
   protected readonly logger = new Logger(this.constructor.name);
   protected readonly MAX_STEPS = 20;
-  protected onlineModelList: string[] = [];
+  protected _onlineModelList: string[] = [];
   abstract readonly type: CopilotProviderType;
   abstract readonly models: CopilotProviderModel[];
   abstract configured(): boolean;
+
+  /** Public getter for online models (dynamically loaded from provider API) */
+  get onlineModelList(): string[] {
+    return this._onlineModelList;
+  }
 
   @Inject() protected readonly AFFiNEConfig!: Config;
   @Inject() protected readonly factory!: CopilotProviderFactory;
