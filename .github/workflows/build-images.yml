@@ -266,6 +266,10 @@ jobs:
         with:
           app-version: ${{ inputs.app-version }}
 
+      - name: Set lowercase image name
+        id: image
+        run: echo "IMAGE_NAME=${GITHUB_REPOSITORY,,}" >> $GITHUB_OUTPUT
+
       - name: Build front Dockerfile
         uses: docker/build-push-action@v6
         with:
@@ -275,7 +279,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           provenance: true
           file: .github/deployment/front/Dockerfile
-          tags: ghcr.io/${{ github.repository }}-front:${{inputs.build-type}}-${{ inputs.git-short-hash }}
+          tags: ghcr.io/${{ steps.image.outputs.IMAGE_NAME }}-front:${{inputs.build-type}}-${{ inputs.git-short-hash }}
 
       - name: Build graphql Dockerfile
         uses: docker/build-push-action@v6
@@ -286,4 +290,4 @@ jobs:
           platforms: linux/amd64,linux/arm64,linux/arm/v7
           provenance: true
           file: .github/deployment/node/Dockerfile
-          tags: ghcr.io/${{ github.repository }}:${{inputs.build-type}}-${{ inputs.git-short-hash }}
+          tags: ghcr.io/${{ steps.image.outputs.IMAGE_NAME }}:${{inputs.build-type}}-${{ inputs.git-short-hash }}
