@@ -111,15 +111,23 @@ export abstract class CopilotProvider<C = any> {
         inputTypes.every(type => cap.input.includes(type)));
 
     if (modelId) {
+      // 1. Exact match
       const hasOnlineModel = this.onlineModelList.includes(modelId);
+      if (hasOnlineModel) return { id: modelId, capabilities: [] };
+
+      // 2. Suffix match (ignore prefix like "gemini/")
+      const matchedOnlineModel = this.onlineModelList.find(
+        m => modelId.endsWith(m) || m.endsWith(modelId)
+      );
+      if (matchedOnlineModel) {
+        return { id: matchedOnlineModel, capabilities: [] };
+      }
 
       const model = this.models.find(
         m => m.id === modelId && m.capabilities.some(matcher)
       );
 
       if (model) return model;
-      // allow online model without capabilities check
-      if (hasOnlineModel) return { id: modelId, capabilities: [] };
       return undefined;
     }
     if (!outputType) return undefined;
