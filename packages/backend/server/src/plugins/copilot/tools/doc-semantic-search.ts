@@ -30,9 +30,9 @@ export const buildDocSearchGetter = (
     const canAccess = await ac
       .user(options.user)
       .workspace(options.workspace)
+      .allowLocal()
       .can('Workspace.Read');
-    if (!canAccess)
-      return 'You do not have permission to access this workspace.';
+    if (!canAccess) return [];
     const [chunks, contextChunks] = await Promise.all([
       context.matchWorkspaceAll(options.workspace, query, 10, abortSignal),
       docContext?.matchFiles(query, 10, abortSignal) ?? [],
@@ -41,6 +41,7 @@ export const buildDocSearchGetter = (
     const docChunks = await ac
       .user(options.user)
       .workspace(options.workspace)
+      .allowLocal()
       .docs(
         chunks.filter(c => 'docId' in c),
         'Doc.Read'

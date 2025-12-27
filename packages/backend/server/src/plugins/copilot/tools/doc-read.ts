@@ -22,6 +22,7 @@ export const buildDocContentGetter = (
     const canAccess = await ac
       .user(options.user)
       .workspace(options.workspace)
+      .allowLocal()
       .doc(docId)
       .can('Doc.Read');
     if (!canAccess) {

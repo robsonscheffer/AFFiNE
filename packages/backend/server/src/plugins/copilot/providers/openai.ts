@@ -36,6 +36,7 @@ import type {
   CopilotProviderModel,
   CopilotStructuredOptions,
   ModelConditions,
+  ModelFullConditions,
   PromptMessage,
   StreamObject,
 } from './types';
@@ -144,6 +145,54 @@ export class OpenAIProvider extends CopilotProvider<OpenAIConfig> {
             ModelOutputType.Structured,
           ],
           defaultForOutputType: true,
+        },
+      ],
+    },
+    {
+      name: 'GPT 5',
+      id: 'gpt-5',
+      capabilities: [
+        {
+          input: [ModelInputType.Text, ModelInputType.Image],
+          output: [
+            ModelOutputType.Text,
+            ModelOutputType.Object,
+            ModelOutputType.Structured,
+          ],
+        },
+      ],
+    },
+    {
+      name: 'GPT 5.2',
+      id: 'gpt-5.2',
+      capabilities: [
+        {
+          input: [ModelInputType.Text, ModelInputType.Image],
+          output: [
+            ModelOutputType.Text,
+            ModelOutputType.Object,
+            ModelOutputType.Structured,
+          ],
+        },
+      ],
+    },
+    {
+      name: 'GPT 5 Mini',
+      id: 'gpt-5-mini',
+      capabilities: [
+        {
+          input: [ModelInputType.Text, ModelInputType.Image],
+          output: [ModelOutputType.Text, ModelOutputType.Object],
+        },
+      ],
+    },
+    {
+      name: 'GPT 5 Nano',
+      id: 'gpt-5-nano',
+      capabilities: [
+        {
+          input: [ModelInputType.Text, ModelInputType.Image],
+          output: [ModelOutputType.Text, ModelOutputType.Object],
         },
       ],
     },
@@ -320,11 +369,64 @@ export class OpenAIProvider extends CopilotProvider<OpenAIConfig> {
   #instance!: VercelOpenAIProvider | VercelOpenAICompatibleProvider;
 
   override configured(): boolean {
+    // If selfhosted, we allow permissive configuration (e.g. custom baseURL without apiKey)
+    if (env.selfhosted) return true;
     return !!this.config.apiKey;
+  }
+
+  // Override to allow permissive matching when using custom baseURL
+  override async match(cond: ModelConditions = {}): Promise<boolean> {
+    const isStrictMatch = await super.match(cond);
+    if (isStrictMatch) return true;
+
+    // Permissive check: if selfhosted (where online fetch happens), and we have a specific model request,
+    // we assume the user knows what they are doing even if auto-discovery fails.
+    if (env.selfhosted && cond.modelId) {
+      this.logger.debug(
+        `Permissive match for model ${cond.modelId} (selfhosted mode)`
+      );
+      return true;
+    }
+    this.logger.warn(
+      `Match failed for model ${cond.modelId} in OpenAIProvider`
+    );
+    return false;
+  }
+
+  protected override selectModel(cond: ModelConditions): CopilotProviderModel {
+    try {
+      return super.selectModel(cond);
+    } catch (error) {
+      // If strict selection fails, fall back to permissive mode if conditions are met
+      if (env.selfhosted && cond.modelId) {
+        this.logger.debug(
+          `Synthesizing model capability for ${cond.modelId} (selfhosted mode)`
+        );
+        // cast to any to access outputType which might not be in ModelConditions but available at runtime
+        // or effectively treat as ModelFullConditions
+        const fullCond = cond as ModelFullConditions;
+        return {
+          id: cond.modelId,
+          capabilities: [
+            {
+              input: cond.inputTypes || [ModelInputType.Text],
+              output: fullCond.outputType ? [fullCond.outputType] : [],
+            },
+          ],
+        };
+      }
+      this.logger.error(
+        `SelectModel failed for ${cond.modelId} and no fallback available`
+      );
+      throw error;
+    }
   }
 
   protected override setup() {
     super.setup();
+    this.logger.debug(
+      `Setup OpenAIProvider: oldApiStyle=${this.config.oldApiStyle}, baseURL=${this.config.baseURL}, apiKey=${this.config.apiKey ? '***' : 'undefined'}`
+    );
     this.#instance =
       this.config.oldApiStyle && this.config.baseURL
         ? createOpenAICompatible({
@@ -432,7 +534,20 @@ export class OpenAIProvider extends CopilotProvider<OpenAIConfig> {
         tools: await this.getTools(options, model.id),
         stopWhen: stepCountIs(this.MAX_STEPS),
         abortSignal: options.signal,
+        headers: {
+          'X-Affine-User-Id': options.user ?? 'unknown',
+          ...(options.email ? { 'X-Affine-User-Email': options.email } : {}),
+        },
       });
+
+      this.logger.debug(
+        `[LiteLLM Request] Model: ${model.id} | User: ${options.user ?? 'unknown'} | Email: ${options.email ?? 'unknown'} | Headers: ${JSON.stringify(
+          {
+            'X-Affine-User-Id': options.user ?? 'unknown',
+            ...(options.email ? { 'X-Affine-User-Email': options.email } : {}),
+          }
+        )}`
+      );
 
       return text.trim();
     } catch (e: any) {
@@ -559,6 +674,10 @@ export class OpenAIProvider extends CopilotProvider<OpenAIConfig> {
           openai: options.user ? { user: options.user } : {},
         },
         abortSignal: options.signal,
+        headers: {
+          'X-Affine-User-Id': options.user ?? 'unknown',
+          ...(options.email ? { 'X-Affine-User-Email': options.email } : {}),
+        },
       });
 
       return JSON.stringify(object);
@@ -599,6 +718,10 @@ export class OpenAIProvider extends CopilotProvider<OpenAIConfig> {
             },
           },
           abortSignal: options.signal,
+          headers: {
+            'X-Affine-User-Id': options.user ?? 'unknown',
+            ...(options.email ? { 'X-Affine-User-Email': options.email } : {}),
+          },
         });
 
         const topMap: Record<string, number> = LogProbsSchema.parse(
@@ -659,7 +782,15 @@ export class OpenAIProvider extends CopilotProvider<OpenAIConfig> {
       tools: await this.getTools(options, model.id),
       stopWhen: stepCountIs(this.MAX_STEPS),
       abortSignal: options.signal,
+      headers: {
+        'X-Affine-User-Id': options.user ?? 'unknown',
+        ...(options.email ? { 'X-Affine-User-Email': options.email } : {}),
+      },
     });
+
+    this.logger.debug(
+      `[LiteLLM Stream] Model: ${model.id} | User: ${options.user ?? 'unknown'} | Email: ${options.email ?? 'unknown'}`
+    );
     return fullStream;
   }
 
@@ -786,19 +917,30 @@ export class OpenAIProvider extends CopilotProvider<OpenAIConfig> {
     await this.checkParams({ embeddings: messages, cond: fullCond, options });
     const model = this.selectModel(fullCond);
 
-    if (!('embedding' in this.#instance)) {
-      throw new CopilotProviderNotSupported({
-        provider: this.type,
-        kind: 'embedding',
+    this.logger.debug(`Generating embedding for model: ${model.id}`);
+    const instanceHasEmbedding = 'embedding' in this.#instance;
+    this.logger.debug(
+      `OpenAI instance supports embedding: ${instanceHasEmbedding}`
+    );
+
+    let modelInstance;
+    if ('embedding' in this.#instance) {
+      // @ts-ignore
+      modelInstance = this.#instance.embedding(model.id);
+    } else {
+      // Fallback: create a temporary OpenAI instance for embedding if the main one (e.g. OpenAICompatible) doesn't support it.
+      // This assumes the API is compatible enough for standard OpenAI embedding calls.
+      const fallbackInstance = createOpenAI({
+        apiKey: this.config.apiKey,
+        baseURL: this.config.baseURL,
       });
+      modelInstance = fallbackInstance.embedding(model.id);
     }
 
     try {
       metrics.ai
         .counter('generate_embedding_calls')
         .add(1, { model: model.id });
-
-      const modelInstance = this.#instance.embedding(model.id);
 
       const { embeddings } = await embedMany({
         model: modelInstance,

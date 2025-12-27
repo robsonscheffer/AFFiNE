@@ -445,6 +445,12 @@ export class CopilotEmbeddingJob {
               this.logger.debug(
                 `Doc ${docId} in workspace ${workspaceId} has no content change, skipping embedding.`
               );
+              if (contextId) {
+                this.event.emit('workspace.doc.embed.finished', {
+                  contextId,
+                  docId,
+                });
+              }
               return;
             }
 
@@ -467,6 +473,12 @@ export class CopilotEmbeddingJob {
             this.logger.debug(
               `Doc ${docId} in workspace ${workspaceId} has summary, embedding done.`
             );
+            if (contextId) {
+              this.event.emit('workspace.doc.embed.finished', {
+                contextId,
+                docId,
+              });
+            }
           } else {
             // for empty doc, insert empty embedding
             this.logger.debug(
@@ -476,6 +488,12 @@ export class CopilotEmbeddingJob {
               workspaceId,
               docId
             );
+            if (contextId) {
+              this.event.emit('workspace.doc.embed.finished', {
+                contextId,
+                docId,
+              });
+            }
           }
         } else {
           this.logger.debug(
@@ -485,6 +503,19 @@ export class CopilotEmbeddingJob {
             workspaceId,
             docId
           );
+          if (contextId) {
+            this.event.emit('workspace.doc.embed.finished', {
+              contextId,
+              docId,
+            });
+          }
+        }
+      } else {
+        if (contextId) {
+          this.event.emit('workspace.doc.embed.finished', {
+            contextId,
+            docId,
+          });
         }
       }
     } catch (error: any) {
@@ -506,6 +537,12 @@ export class CopilotEmbeddingJob {
           workspaceId,
           docId
         );
+        if (contextId) {
+          this.event.emit('workspace.doc.embed.finished', {
+            contextId,
+            docId,
+          });
+        }
         return;
       }
 

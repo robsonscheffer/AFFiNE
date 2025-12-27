@@ -30,6 +30,7 @@ import { SubscriptionPlan, SubscriptionStatus } from '../payment/types';
 import { ChatMessageCache } from './message';
 import { ChatPrompt, PromptService } from './prompt';
 import {
+  CopilotChatOptions,
   CopilotProviderFactory,
   ModelOutputType,
   PromptMessage,
@@ -105,8 +106,16 @@ export class ChatSession implements AsyncDisposable {
     requestedModelId?: string
   ): Promise<string> {
     const defaultModel = this.model;
+
+    const factory = this.moduleRef.get(CopilotProviderFactory, {
+      strict: false,
+    });
+    const availableModels = factory ? factory.getAvailableModels() : [];
+    const isAvailable = (m: string) =>
+      this.optionalModels.includes(m) || availableModels.includes(m);
+
     const normalize = (m?: string) =>
-      !!m && this.optionalModels.includes(m) ? m : defaultModel;
+      !!m && isAvailable(m) ? m : defaultModel;
     const isPro = (m?: string) => !!m && this.proModels.includes(m);
 
     // try resolve payment subscription service lazily
@@ -601,7 +610,8 @@ export class ChatSessionService {
   // public for test mock
   async chatWithPrompt(
     promptName: string,
-    message: Partial<PromptMessage>
+    message: Partial<PromptMessage>,
+    user?: { id: string; email?: string }
   ): Promise<string> {
     const prompt = await this.prompt.get(promptName);
     if (!prompt) {
@@ -610,7 +620,12 @@ export class ChatSessionService {
 
     const cond = { modelId: prompt.model };
     const msg = { role: 'user' as const, content: '', ...message };
-    const config = Object.assign({}, prompt.config);
+    const config = Object.assign({}, prompt.config || {}) as CopilotChatOptions;
+    if (user) {
+      config.user = user.id;
+      // @ts-expect-error - email is not in CopilotChatOptions type definition but added in provider logic
+      config.email = user.email;
+    }
 
     const provider = await this.moduleRef
       .get(CopilotProviderFactory)
@@ -666,11 +681,16 @@ export class ChatSessionService {
       }
 
       {
-        const title = await this.chatWithPrompt('Summary as title', {
-          content: session.messages
-            .map(m => `[${m.role}]: ${m.content}`)
-            .join('\n'),
-        });
+        const user = await this.models.user.get(userId);
+        const title = await this.chatWithPrompt(
+          'Summary as title',
+          {
+            content: session.messages
+              .map(m => `[${m.role}]: ${m.content}`)
+              .join('\n'),
+          },
+          user ? { id: user.id, email: user.email } : undefined
+        );
         await this.models.copilotSession.update({ userId, sessionId, title });
       }
     } catch (error) {

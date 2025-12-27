@@ -324,4 +324,24 @@ export class CopilotContextService implements OnApplicationBootstrap {
       status: ContextEmbedStatus.failed,
     }));
   }
+  @OnEvent('workspace.doc.embed.finished')
+  async onDocEmbedFinish({
+    contextId,
+    docId,
+  }: Events['workspace.doc.embed.finished']) {
+    const context = await this.get(contextId);
+    await context.saveDocRecord(docId, doc => ({
+      ...(doc as ContextDoc),
+      status: ContextEmbedStatus.finished,
+    }));
+  }
+}
+
+declare global {
+  interface Events {
+    'workspace.doc.embed.finished': {
+      contextId: string;
+      docId: string;
+    };
+  }
 }
