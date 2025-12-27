@@ -47,6 +47,7 @@ import {
 } from '../../base';
 import { ServerFeature, ServerService } from '../../core';
 import { CurrentUser, Public } from '../../core/auth';
+import { Models } from '../../models';
 import { CopilotContextService } from './context';
 import {
   CopilotProvider,
@@ -82,7 +83,8 @@ export class CopilotController implements BeforeApplicationShutdown {
     private readonly context: CopilotContextService,
     private readonly provider: CopilotProviderFactory,
     private readonly workflow: CopilotWorkflowService,
-    private readonly storage: CopilotStorage
+    private readonly storage: CopilotStorage,
+    private readonly models: Models
   ) {}
 
   async beforeApplicationShutdown() {
@@ -195,6 +197,10 @@ export class CopilotController implements BeforeApplicationShutdown {
   ) {
     let { messageId, retry, modelId, params } = ChatQuerySchema.parse(query);
 
+    // Fetch full user to get email if missing in session
+    const fullUser = await this.models.user.get(user.id);
+    const email = fullUser?.email ?? user.email;
+
     const { provider, model } = await this.chooseProvider(
       outputType,
       user.id,
@@ -239,6 +245,7 @@ export class CopilotController implements BeforeApplicationShutdown {
       model,
       session,
       finalMessage,
+      email,
     };
   }
 
@@ -253,7 +260,7 @@ export class CopilotController implements BeforeApplicationShutdown {
     const info: any = { sessionId, params: query };
 
     try {
-      const { provider, model, session, finalMessage } =
+      const { provider, model, session, finalMessage, email } =
         await this.prepareChatSession(
           user,
           sessionId,
@@ -270,9 +277,10 @@ export class CopilotController implements BeforeApplicationShutdown {
       const content = await provider.text({ modelId: model }, finalMessage, {
         ...session.config.promptConfig,
         signal: getSignal(req).signal,
-        user: user.id,
         session: session.config.sessionId,
         workspace: session.config.workspaceId,
+        user: user.id,
+        email,
         reasoning,
         webSearch,
         tools: getTools(session.config.promptConfig?.tools, toolsConfig),
@@ -308,7 +316,7 @@ export class CopilotController implements BeforeApplicationShutdown {
     const info: any = { sessionId, params: query, throwInStream: false };
 
     try {
-      const { provider, model, session, finalMessage } =
+      const { provider, model, session, finalMessage, email } =
         await this.prepareChatSession(
           user,
           sessionId,
@@ -336,9 +344,10 @@ export class CopilotController implements BeforeApplicationShutdown {
         provider.streamText({ modelId: model }, finalMessage, {
           ...session.config.promptConfig,
           signal,
-          user: user.id,
           session: session.config.sessionId,
           workspace: session.config.workspaceId,
+          user: user.id,
+          email,
           reasoning,
           webSearch,
           tools: getTools(session.config.promptConfig?.tools, toolsConfig),

@@ -53,10 +53,19 @@ export class CopilotProviderFactory {
         continue;
       }
 
-      if (await provider.match({ modelId })) {
+      this.logger.debug(`Checking provider ${type} for match...`);
+      const isMatched = await provider.match({ modelId });
+      this.logger.debug(`Provider ${type} match result: ${isMatched}`);
+
+      if (isMatched) {
         candidate = provider;
         this.logger.debug(`Copilot provider candidate found: ${type}`);
+        break;
       }
+    }
+
+    if (!candidate) {
+      this.logger.warn(`No copilot provider found for model: ${modelId}`);
     }
 
     return candidate;
