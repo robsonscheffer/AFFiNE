@@ -21,7 +21,7 @@ type Prompt = Omit<
 
 export const Scenario = {
   audio_transcribing: ['Transcript audio'],
-  chat: ['Chat With Mersia AI Pilot'],
+  chat: ['Chat With AFFiNE AI'],
   // no prompt needed, just a placeholder
   embedding: [],
   image: [
