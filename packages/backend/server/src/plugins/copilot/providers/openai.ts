@@ -54,6 +54,7 @@ export type OpenAIConfig = {
   apiKey: string;
   baseURL?: string;
   oldApiStyle?: boolean;
+  headers?: Record<string, string>;
 };
 
 const ModelListSchema = z.object({
@@ -536,16 +537,21 @@ export class OpenAIProvider extends CopilotProvider<OpenAIConfig> {
         abortSignal: options.signal,
         headers: {
           'X-Affine-User-Id': options.user ?? 'unknown',
-          ...(options.email ? { 'X-Affine-User-Email': options.email } : {}),
+          'X-OpenWebUI-User-Id': options.user ?? 'unknown',
+          'x-litellm-user-id': options.user ?? 'unknown',
+          ...(options.email
+            ? {
+                'X-Affine-User-Email': options.email,
+                'X-OpenWebUI-User-Email': options.email,
+                'x-litellm-user-email': options.email,
+              }
+            : {}),
         },
       });
 
       this.logger.debug(
         `[LiteLLM Request] Model: ${model.id} | User: ${options.user ?? 'unknown'} | Email: ${options.email ?? 'unknown'} | Headers: ${JSON.stringify(
-          {
-            'X-Affine-User-Id': options.user ?? 'unknown',
-            ...(options.email ? { 'X-Affine-User-Email': options.email } : {}),
-          }
+          this.getExtraHeaders(options)
         )}`
       );
 
@@ -674,10 +680,7 @@ export class OpenAIProvider extends CopilotProvider<OpenAIConfig> {
           openai: options.user ? { user: options.user } : {},
         },
         abortSignal: options.signal,
-        headers: {
-          'X-Affine-User-Id': options.user ?? 'unknown',
-          ...(options.email ? { 'X-Affine-User-Email': options.email } : {}),
-        },
+        headers: this.getExtraHeaders(options),
       });
 
       return JSON.stringify(object);
@@ -719,8 +722,7 @@ export class OpenAIProvider extends CopilotProvider<OpenAIConfig> {
           },
           abortSignal: options.signal,
           headers: {
-            'X-Affine-User-Id': options.user ?? 'unknown',
-            ...(options.email ? { 'X-Affine-User-Email': options.email } : {}),
+            ...this.getExtraHeaders(options),
           },
         });
 
@@ -782,10 +784,7 @@ export class OpenAIProvider extends CopilotProvider<OpenAIConfig> {
       tools: await this.getTools(options, model.id),
       stopWhen: stepCountIs(this.MAX_STEPS),
       abortSignal: options.signal,
-      headers: {
-        'X-Affine-User-Id': options.user ?? 'unknown',
-        ...(options.email ? { 'X-Affine-User-Email': options.email } : {}),
-      },
+      headers: this.getExtraHeaders(options),
     });
 
     this.logger.debug(
@@ -950,7 +949,25 @@ export class OpenAIProvider extends CopilotProvider<OpenAIConfig> {
             dimensions: options.dimensions || DEFAULT_DIMENSIONS,
           },
         },
+        headers: {
+          'X-Affine-User-Id': options.user ?? 'unknown',
+          'X-OpenWebUI-User-Id': options.user ?? 'unknown',
+          'x-litellm-user-id': options.user ?? 'unknown',
+          ...(options.email
+            ? {
+                'X-Affine-User-Email': options.email,
+                'X-OpenWebUI-User-Email': options.email,
+                'x-litellm-user-email': options.email,
+              }
+            : {}),
+        },
       });
+
+      this.logger.debug(
+        `[LiteLLM Embedding] Model: ${model.id} | User: ${options.user ?? 'unknown'} | Email: ${options.email ?? 'unknown'} | Headers: ${JSON.stringify(
+          this.getExtraHeaders(options)
+        )}`
+      );
 
       return embeddings.filter(v => v && Array.isArray(v));
     } catch (e: any) {
@@ -976,5 +993,23 @@ export class OpenAIProvider extends CopilotProvider<OpenAIConfig> {
   private isReasoningModel(model: string) {
     // o series reasoning models
     return model.startsWith('o') || model.startsWith('gpt-5');
+  }
+
+  private getExtraHeaders(options: { user?: string; email?: string }) {
+    const headers: Record<string, string> = {
+      'X-Affine-User-Id': options.user ?? 'unknown',
+      ...(options.email ? { 'X-Affine-User-Email': options.email } : {}),
+    };
+
+    if (this.config.headers) {
+      for (const [key, value] of Object.entries(this.config.headers)) {
+        // @ts-ignore
+        headers[key] = value
+          .replace('{{user}}', options.user ?? 'unknown')
+          .replace('{{email}}', options.email ?? 'unknown');
+      }
+    }
+
+    return headers;
   }
 }
