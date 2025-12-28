@@ -411,7 +411,7 @@ export class CopilotController implements BeforeApplicationShutdown {
     const info: any = { sessionId, params: query, throwInStream: false };
 
     try {
-      const { provider, model, session, finalMessage } =
+      const { provider, model, session, finalMessage, email } =
         await this.prepareChatSession(
           user,
           sessionId,
@@ -440,6 +440,7 @@ export class CopilotController implements BeforeApplicationShutdown {
           ...session.config.promptConfig,
           signal,
           user: user.id,
+          email,
           session: session.config.sessionId,
           workspace: session.config.workspaceId,
           reasoning,
@@ -510,6 +511,10 @@ export class CopilotController implements BeforeApplicationShutdown {
     try {
       let { messageId, params } = ChatQuerySchema.parse(query);
 
+      // Fetch full user to get email if missing in session
+      const fullUser = await this.models.user.get(user.id);
+      const email = fullUser?.email ?? user.email;
+
       const [, session] = await this.appendSessionMessage(sessionId, messageId);
       info.model = session.model;
 
@@ -539,6 +544,7 @@ export class CopilotController implements BeforeApplicationShutdown {
           ...session.config.promptConfig,
           signal,
           user: user.id,
+          email,
           session: session.config.sessionId,
           workspace: session.config.workspaceId,
         })
@@ -632,6 +638,10 @@ export class CopilotController implements BeforeApplicationShutdown {
     try {
       let { messageId, params } = ChatQuerySchema.parse(query);
 
+      // Fetch full user to get email if missing in session
+      const fullUser = await this.models.user.get(user.id);
+      const email = fullUser?.email ?? user.email;
+
       const { provider, model, hasAttachment } = await this.chooseProvider(
         ModelOutputType.Image,
         user.id,
@@ -683,6 +693,7 @@ export class CopilotController implements BeforeApplicationShutdown {
             seed: this.parseNumber(params.seed),
             signal,
             user: user.id,
+            email,
             session: session.config.sessionId,
             workspace: session.config.workspaceId,
           }
