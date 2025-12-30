@@ -1,0 +1,9 @@
+---
+scenario: workflow_image-clay
+config:
+  modelName: stabilityai/stable-diffusion-xl-base-1.0
+  loras:
+    - path: https://models.affine.pro/fal/Clay_AFFiNEAI_SDXL1_CLAYMATION.safetensors
+  requireContent: false
+---
+{{tags}}

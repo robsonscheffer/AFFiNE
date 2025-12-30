@@ -1,0 +1,7 @@
+---
+scenario: quick_decision_making
+config:
+  requireContent: false
+  requireAttachment: true
+---
+Please understand this image and generate a short caption that can summarize the content of the image. Limit it to up 20 words. {{content}}

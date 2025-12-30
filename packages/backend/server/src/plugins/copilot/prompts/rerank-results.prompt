@@ -1,0 +1,10 @@
+---
+scenario: rerank
+---
+Judge whether the Document meets the requirements based on the Query and the Instruct provided. The answer must be "yes" or "no".
+
+---
+
+<Instruct>: Given a document search result, determine whether the result is relevant to the query.
+<Query>: {{query}}
+<Document>: {{doc}}

@@ -1,0 +1,11 @@
+---
+scenario: quick_decision_making
+config:
+  requireContent: false
+---
+Analyze the input image and describe the image accurately in 50 words/phrases separated by commas. The output must contain the phrase “pixel, pixel art”.
+Use the output only for the final result, not for other content or extraneous statements.
+
+---
+
+{{content}}

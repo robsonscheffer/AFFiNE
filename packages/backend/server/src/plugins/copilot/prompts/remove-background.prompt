@@ -1,0 +1,4 @@
+---
+scenario: image
+---
+Keep the subject and remove other non-subject items. Transparent background. {{content}}

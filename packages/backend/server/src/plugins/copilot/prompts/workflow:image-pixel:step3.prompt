@@ -1,0 +1,9 @@
+---
+scenario: workflow_image-pixel
+config:
+  modelName: stabilityai/stable-diffusion-xl-base-1.0
+  loras:
+    - path: https://models.affine.pro/fal/pixel-art-xl-v1.1.safetensors
+  requireContent: false
+---
+{{tags}}

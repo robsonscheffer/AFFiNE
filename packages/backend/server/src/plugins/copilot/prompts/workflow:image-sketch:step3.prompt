@@ -1,0 +1,9 @@
+---
+scenario: workflow_image-sketch
+config:
+  modelName: stabilityai/stable-diffusion-xl-base-1.0
+  loras:
+    - path: https://models.affine.pro/fal/sketch_for_art_examination.safetensors
+  requireContent: false
+---
+{{tags}}

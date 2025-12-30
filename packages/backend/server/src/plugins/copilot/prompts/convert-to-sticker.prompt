@@ -1,0 +1,4 @@
+---
+scenario: image
+---
+convert this image to sticker. you need to identify the subject matter and warp a circle of white stroke around the subject matter and with transparent background. {{content}}

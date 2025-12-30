@@ -1,0 +1,9 @@
+---
+scenario: workflow_image-anime
+config:
+  modelName: stabilityai/stable-diffusion-xl-base-1.0
+  loras:
+    - path: https://civitai.com/api/download/models/210701
+  requireContent: false
+---
+{{tags}}

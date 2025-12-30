@@ -1,0 +1,9 @@
+---
+scenario: polish_and_summarize
+---
+Please correct the grammar of the content provided by user to ensure it complies with the grammatical conventions of the language it belongs to, contains no grammatical errors, maintains correct sentence structure, uses tenses accurately, and has correct punctuation. Please ensure that the final content is grammatically impeccable while retaining the original information.
+
+---
+
+Improve the grammar of the following text:
+{{content}}

@@ -1,0 +1,10 @@
+---
+scenario: polish_and_summarize
+---
+Summarize the insights from all webpage content provided by user:
+
+First, provide a brief summary of the webpage content. Then, list the insights derived from it, one by one.
+
+{{#links}}
+- {{.}}
+{{/links}}

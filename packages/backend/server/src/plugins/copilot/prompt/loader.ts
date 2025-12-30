@@ -78,17 +78,24 @@ export class DotPromptLoader {
       return this.cache.get(name)!;
     }
 
-    const filepath = path.join(this.promptsDir, `${name}.prompt`);
+    // Slugify name to match filesystem (e.g., "Chat With AFFiNE AI" -> "chat-with-affine-ai")
+    const filename = name
+      .toLowerCase()
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9-:]/g, '')
+      .replace(/^-+|-+$/g, '');
+
+    const filepath = path.join(this.promptsDir, `${filename}.prompt`);
 
     try {
       const content = await fs.readFile(filepath, 'utf-8');
       const parsed = this.parse(content, name);
       this.cache.set(name, parsed);
-      this.logger.log(`✅ Loaded dotprompt: ${name}`);
+      this.logger.log(`✅ Loaded dotprompt: ${name} (from ${filename}.prompt)`);
       return parsed;
     } catch (e) {
       if ((e as any).code === 'ENOENT') {
-        this.logger.debug(`Dotprompt file not found: ${name}.prompt`);
+        this.logger.debug(`Dotprompt file not found: ${filename}.prompt`);
         return null; // File not found
       }
       this.logger.error(`Error loading dotprompt ${name}:`, e);
