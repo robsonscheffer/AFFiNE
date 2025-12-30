@@ -21,6 +21,7 @@
     "init": "yarn prisma migrate dev && yarn data-migration run",
     "seed": "r ./src/seed/index.ts",
     "genconfig": "r ./scripts/genconfig.ts",
+    "migrate-to-dotprompt": "r ./scripts/migrate-to-dotprompt.ts",
     "cli": "cross-env SERVER_FLAVOR=script node ./dist/main.js",
     "predeploy": "yarn prisma migrate deploy && yarn cli run",
     "postinstall": "prisma generate"
