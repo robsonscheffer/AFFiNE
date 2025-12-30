@@ -10,17 +10,20 @@ import {
   PromptMessageSchema,
 } from '../providers';
 import { ChatPrompt } from './chat-prompt';
+import { DotPrompt, DotPromptLoader } from './loader';
 import {
   CopilotPromptScenario,
   prompts,
   refreshPrompts,
   Scenario,
 } from './prompts';
+import { normalizeScenarioConfig, ScenarioConfig } from './schema';
 
 @Injectable()
 export class PromptService implements OnApplicationBootstrap {
   private readonly logger = new Logger(PromptService.name);
   private readonly cache = new Map<string, ChatPrompt>();
+  private readonly dotpromptLoader = new DotPromptLoader();
 
   constructor(
     private readonly config: Config,
@@ -98,6 +101,7 @@ export class PromptService implements OnApplicationBootstrap {
 
   /**
    * get prompt messages by prompt name
+   * Priority: 1. Dotprompt file, 2. Database
    * @param name prompt name
    * @returns prompt messages
    */
@@ -108,10 +112,123 @@ export class PromptService implements OnApplicationBootstrap {
       if (cached) return cached;
     }
 
+    // 1. Try dotprompt file first
+    const dotprompt = await this.dotpromptLoader.load(name);
+    if (dotprompt) {
+      this.logger.log(`Loading prompt from dotprompt file: ${name}`);
+      return this.convertDotPromptToChatPrompt(dotprompt, name);
+    }
+
+    // 2. Fall back to database (legacy)
+    this.logger.debug(`Loading prompt from database: ${name}`);
+    return this.getFromDatabase(name);
+  }
+
+  /**
+   * Convert dotprompt to ChatPrompt with scenario config integration
+   */
+  private async convertDotPromptToChatPrompt(
+    dotprompt: DotPrompt,
+    name: string
+  ): Promise<ChatPrompt> {
+    // Get scenario config for this prompt
+    const scenario = dotprompt.frontmatter.scenario || this.inferScenario(name);
+    const scenarioConfig = this.getScenarioConfig(scenario);
+
+    if (!scenarioConfig) {
+      throw new Error(
+        `No scenario config found for: ${scenario}. ` +
+          `Please configure copilot.scenarios.scenarios.${scenario} in config.json`
+      );
+    }
+
+    // Validate model format (must include provider prefix)
+    const model = scenarioConfig.model;
+    if (!model.includes('/')) {
+      throw new Error(
+        `Model must include provider prefix: ${model}. ` +
+          `Expected format: provider/model-id (e.g., "openai/gpt-4o"). ` +
+          `Please update copilot.scenarios.scenarios.${scenario}.model in config.json`
+      );
+    }
+
+    // Merge config: scenario config > dotprompt config
+    const mergedConfig: PromptConfig = {
+      ...dotprompt.frontmatter.config,
+      ...scenarioConfig.config,
+    };
+
+    // Add tools and proModels if specified
+    if (dotprompt.frontmatter.tools) {
+      (mergedConfig as any).tools = dotprompt.frontmatter.tools;
+    }
+    if (scenarioConfig.proModels) {
+      (mergedConfig as any).proModels = scenarioConfig.proModels;
+    }
+
+    // Parse prompt template to messages
+    const messages = this.dotpromptLoader.parsePromptTemplate(
+      dotprompt.content
+    );
+
+    const chatPrompt = ChatPrompt.createFromPrompt({
+      name,
+      model, // From scenario config
+      optionalModels: scenarioConfig.optionalModels || [model],
+      action: scenario, // Use scenario as action
+      messages,
+      config: mergedConfig,
+    });
+
+    this.cache.set(name, chatPrompt);
+    this.logger.log(
+      `✅ Loaded dotprompt: ${name} (scenario: ${scenario}, model: ${model})`
+    );
+    return chatPrompt;
+  }
+
+  /**
+   * Get scenario configuration from config.json
+   */
+  private getScenarioConfig(scenario: string): ScenarioConfig | null {
+    const scenariosConfig = this.config.copilot?.scenarios;
+    if (!scenariosConfig?.scenarios) return null;
+
+    // Normalize to enhanced format (handles both legacy and new formats)
+    const normalized = normalizeScenarioConfig(scenariosConfig);
+    return normalized.scenarios?.[scenario] || null;
+  }
+
+  /**
+   * Infer scenario from prompt name
+   * Maps prompt name to scenario (e.g., "chat" → "chat", "coding-apply-updates" → "coding")
+   */
+  private inferScenario(promptName: string): string {
+    // Check if prompt name matches any scenario's prompt names
+    for (const [scenario, names] of Object.entries(Scenario)) {
+      if (
+        Array.isArray(names) &&
+        (names as readonly string[]).includes(promptName)
+      ) {
+        return scenario;
+      }
+    }
+
+    // Fallback: try to infer from name prefix
+    if (promptName.startsWith('coding-')) return 'coding';
+    if (promptName.startsWith('summary')) return 'polish_and_summarize';
+    if (promptName.startsWith('translate')) return 'quick_decision_making';
+
+    // Default to chat
+    return 'chat';
+  }
+
+  /**
+   * Legacy database lookup (backward compatibility)
+   */
+  private async getFromDatabase(name: string): Promise<ChatPrompt | null> {
     const prompt = await this.db.aiPrompt.findUnique({
-      where: {
-        name,
-      },
+      where: { name },
       select: {
         name: true,
         action: true,
