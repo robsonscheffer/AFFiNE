@@ -329,6 +329,20 @@ export class ChatSessionService {
     return messages.data;
   }
 
+  private stripNullBytes(value?: string | null): string {
+    if (!value) return '';
+    return value.replace(/\u0000/g, '');
+  }
+
+  private isNullByteError(error: unknown): boolean {
+    return (
+      error instanceof Error &&
+      (error.message.includes('\\u0000') ||
+        error.message.includes('unsupported Unicode escape sequence') ||
+        error.message.includes('22P05'))
+    );
+  }
+
   private async getHistory(session: Session): Promise<SessionHistory> {
     const prompt = await this.prompt.get(session.promptName);
     if (!prompt) throw new CopilotPromptNotFound({ name: session.promptName });
@@ -670,7 +684,13 @@ export class ChatSessionService {
         );
         return;
       }
-      const { userId, title, messages } = session;
+      const { userId, title } = session;
+      const messages =
+        session.messages?.map(m => ({
+          ...m,
+          content: this.stripNullBytes(m.content),
+        })) ?? [];
+
       if (
         title ||
         !messages.length ||
@@ -680,23 +700,41 @@ export class ChatSessionService {
         return;
       }
 
-      {
-        const user = await this.models.user.get(userId);
-        const title = await this.chatWithPrompt(
-          'Summary as title',
-          {
-            content: session.messages
-              .map(m => `[${m.role}]: ${m.content}`)
-              .join('\n'),
-          },
-          user ? { id: user.id, email: user.email } : undefined
+      const promptContent = messages
+        .map(m => `[${m.role}]: ${m.content}`)
+        .join('\n');
+      const generatedTitle = this.stripNullBytes(
+        await this.chatWithPrompt('Summary as title', {
+          content: promptContent,
+        })
+      ).trim();
+
+      if (!generatedTitle) {
+        this.logger.warn(
+          `Generated empty title for session ${sessionId}, skip updating`
         );
-        await this.models.copilotSession.update({ userId, sessionId, title });
+        return;
       }
+      await this.models.copilotSession.update({
+        userId,
+        sessionId,
+        title: generatedTitle,
+      });
     } catch (error) {
-      console.error(
+      const context = {
+        sessionId,
+        cause: error instanceof Error ? error.cause : error,
+      };
+      if (this.isNullByteError(error)) {
+        this.logger.warn(
+          `Skip title generation for session ${sessionId} due to invalid null bytes in stored data`,
+          context
+        );
+        return;
+      }
+      this.logger.error(
         `Failed to generate title for session ${sessionId}:`,
-        error
+        context
       );
       throw error;
     }

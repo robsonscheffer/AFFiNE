@@ -1,6 +1,6 @@
 {
   "name": "@affine/monorepo",
-  "version": "0.25.7",
+  "version": "0.26.0",
   "private": true,
   "author": "toeverything",
   "license": "MIT",
@@ -8,7 +8,6 @@
     ".",
     "blocksuite/**/*",
     "packages/*/*",
-    "packages/common/y-octo/node",
     "packages/frontend/apps/*",
     "tools/*",
     "docs/reference",
@@ -92,7 +91,7 @@
     "vite": "^7.2.7",
     "vitest": "^3.2.4"
   },
-  "packageManager": "yarn@4.9.1",
+  "packageManager": "yarn@4.12.0",
   "resolutions": {
     "array-buffer-byte-length": "npm:@nolyfill/array-buffer-byte-length@^1",
     "array-includes": "npm:@nolyfill/array-includes@^1",

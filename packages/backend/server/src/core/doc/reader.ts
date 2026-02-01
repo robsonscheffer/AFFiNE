@@ -1,11 +1,6 @@
 import { FactoryProvider, Injectable, Logger } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
-import {
-  applyUpdate,
-  diffUpdate,
-  Doc as YDoc,
-  encodeStateVectorFromUpdate,
-} from 'yjs';
+import { diffUpdate, encodeStateVectorFromUpdate } from 'yjs';
 
 import {
   Cache,
@@ -48,16 +43,14 @@ export abstract class DocReader {
     protected readonly blobStorage: WorkspaceBlobStorage
   ) {}
 
+  // keep methods to allow test mocking
   parseDocContent(bin: Uint8Array, maxSummaryLength = 150) {
-    const doc = new YDoc();
-    applyUpdate(doc, bin);
-    return parsePageDoc(doc, { maxSummaryLength });
+    return parsePageDoc(bin, { maxSummaryLength });
   }
 
+  // keep methods to allow test mocking
   parseWorkspaceContent(bin: Uint8Array) {
-    const doc = new YDoc();
-    applyUpdate(doc, bin);
-    return parseWorkspaceDoc(doc);
+    return parseWorkspaceDoc(bin);
   }
 
   abstract getDoc(
@@ -220,11 +213,9 @@ export class DatabaseDocReader extends DocReader {
     guid: string,
     fullContent?: boolean
   ): Promise<PageDocContent | null> {
-    const docRecord = await this.workspace.getDoc(workspaceId, guid);
-    if (!docRecord) {
-      return null;
-    }
-    return this.parseDocContent(docRecord.bin, fullContent ? -1 : 150);
+    const docBinary = await this.workspace.getDocBinNative(workspaceId, guid);
+    if (!docBinary) return null;
+    return this.parseDocContent(docBinary, fullContent ? -1 : 150);
   }
 
   protected override async getWorkspaceContentWithoutCache(
