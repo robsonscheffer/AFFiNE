@@ -43,7 +43,7 @@ const useProperties = (view: 'list' | 'card') => {
               property.systemProperty.showInDocList === 'stack') ||
             (property.workspaceProperty &&
               WorkspacePropertyTypes[property.workspaceProperty.type]
-                .showInDocList === 'stack')
+                ?.showInDocList === 'stack')
         )
         .filter(p => p.systemProperty?.type !== 'tags'),
     [explorerPropertyList]
@@ -58,7 +58,7 @@ const useProperties = (view: 'list' | 'card') => {
               property.systemProperty.showInDocList === 'inline') ||
             (property.workspaceProperty &&
               WorkspacePropertyTypes[property.workspaceProperty.type]
-                .showInDocList === 'inline')
+                ?.showInDocList === 'inline')
         )
         .filter(p => p.systemProperty?.type !== 'tags')
         .sort((a, b) => {
@@ -287,7 +287,7 @@ const WorkspacePropertyRenderer = ({
   config: (typeof WorkspacePropertyTypes)[keyof typeof WorkspacePropertyTypes];
 }) => {
   const customPropertyValue = useLiveData(doc.customProperty$(property.id));
-  if (!config.docListProperty) {
+  if (!config || !config.docListProperty) {
     return null;
   }
 
