@@ -1,4 +1,4 @@
-import type { CrawlResult } from '@affine/nbstore';
+import type { CrawlResult, DocIndexedClock } from '@affine/nbstore';
 
 export interface Blob {
   key: string;
@@ -171,7 +171,9 @@ export interface NbStorePlugin {
     id: string;
     indexName: string;
     query: string;
-  }) => Promise<{ id: string; score: number; terms: Array<string> }[]>;
+  }) => Promise<{
+    results: { id: string; score: number; terms: Array<string> }[];
+  }>;
   ftsGetDocument: (options: {
     id: string;
     indexName: string;
@@ -182,7 +184,21 @@ export interface NbStorePlugin {
     indexName: string;
     docId: string;
     query: string;
-  }) => Promise<Array<{ start: number; end: number }>>;
+  }) => Promise<{ matches: { start: number; end: number }[] }>;
   ftsFlushIndex: (options: { id: string }) => Promise<void>;
-  ftsIndexVersion: () => Promise<number>;
+  ftsIndexVersion: () => Promise<{ indexVersion: number }>;
+  getDocIndexedClock: (options: {
+    id: string;
+    docId: string;
+  }) => Promise<DocIndexedClock | null>;
+  setDocIndexedClock: (options: {
+    id: string;
+    docId: string;
+    indexedClock: number;
+    indexerVersion: number;
+  }) => Promise<void>;
+  clearDocIndexedClock: (options: {
+    id: string;
+    docId: string;
+  }) => Promise<void>;
 }

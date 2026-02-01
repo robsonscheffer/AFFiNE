@@ -66,6 +66,9 @@ export const PromptToolsSchema = z
     'docEdit',
     // work with indexer
     'docRead',
+    'docCreate',
+    'docUpdate',
+    'docUpdateMeta',
     'docKeywordSearch',
     // work with embeddings
     'docSemanticSearch',
@@ -172,6 +175,7 @@ export type StreamObject = z.infer<typeof StreamObjectSchema>;
 const CopilotProviderOptionsSchema = z.object({
   signal: z.instanceof(AbortSignal).optional(),
   user: z.string().optional(),
+  email: z.string().optional(),
   session: z.string().optional(),
   workspace: z.string().optional(),
 });

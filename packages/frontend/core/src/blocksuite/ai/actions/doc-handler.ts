@@ -24,10 +24,7 @@ import {
 } from '../utils/selection-utils';
 import { mergeStreamObjects } from '../utils/stream-objects';
 import type { AffineAIPanelWidget } from '../widgets/ai-panel/ai-panel';
-import type {
-  AIActionAnswer,
-  AINetworkSearchConfig,
-} from '../widgets/ai-panel/type';
+import type { AIActionAnswer } from '../widgets/ai-panel/type';
 import { actionToAnswerRenderer } from './answer-renderer';
 
 export function bindTextStream(
@@ -55,13 +52,18 @@ export function bindTextStream(
         return;
       }
       try {
-        const parsed = StreamObjectSchema.safeParse(JSON.parse(data));
+        const jsonData = JSON.parse(data);
+        const parsed = StreamObjectSchema.safeParse(jsonData);
         if (parsed.success) {
           answer.streamObjects = mergeStreamObjects([
             ...(answer.streamObjects ?? []),
             parsed.data,
           ]);
+        } else if (typeof jsonData === 'object' && 'text' in jsonData) {
+          // Handle LiteLLM/OpenAI compatible {"text": "..."} format
+          answer.content += jsonData.text;
         } else {
+          // Unknown JSON format, append as-is
           answer.content += data;
         }
       } catch {
@@ -89,8 +91,7 @@ function actionToStream<T extends keyof BlockSuitePresets.AIActions>(
     Parameters<BlockSuitePresets.AIActions[T]>[0],
     keyof BlockSuitePresets.AITextActionOptions
   >,
-  trackerOptions?: BlockSuitePresets.TrackerOptions,
-  networkConfig?: AINetworkSearchConfig
+  trackerOptions?: BlockSuitePresets.TrackerOptions
 ): BlockSuitePresets.TextStream | undefined {
   const action = AIProvider.actions[id];
   if (!action || typeof action !== 'function') return;
@@ -115,7 +116,6 @@ function actionToStream<T extends keyof BlockSuitePresets.AIActions>(
       const models = selectedBlocks?.map(block => block.model);
       const control = trackerOptions?.control ?? 'format-bar';
       const where = trackerOptions?.where ?? 'ai-panel';
-      const { visible, enabled } = networkConfig ?? {};
       const options = {
         ...variants,
         attachments,
@@ -128,7 +128,6 @@ function actionToStream<T extends keyof BlockSuitePresets.AIActions>(
         where,
         docId: host.store.id,
         workspaceId: host.store.workspace.id,
-        webSearch: visible?.value && enabled?.value,
       } as Parameters<typeof action>[0];
       // @ts-expect-error TODO(@Peng): maybe fix this
       stream = await action(options);
@@ -145,8 +144,7 @@ function actionToGenerateAnswer<T extends keyof BlockSuitePresets.AIActions>(
     Parameters<BlockSuitePresets.AIActions[T]>[0],
     keyof BlockSuitePresets.AITextActionOptions
   >,
-  trackerOptions?: BlockSuitePresets.TrackerOptions,
-  networkConfig?: AINetworkSearchConfig
+  trackerOptions?: BlockSuitePresets.TrackerOptions
 ) {
   return ({
     input,
@@ -167,8 +165,7 @@ function actionToGenerateAnswer<T extends keyof BlockSuitePresets.AIActions>(
       input,
       signal,
       variants,
-      trackerOptions,
-      networkConfig
+      trackerOptions
     );
     if (!stream) return;
     bindTextStream(stream, { update, finish, signal });
@@ -196,8 +193,7 @@ function updateAIPanelConfig<T extends keyof BlockSuitePresets.AIActions>(
     host,
     id,
     variants,
-    trackerOptions,
-    config.networkSearchConfig
+    trackerOptions
   );
 
   const ctx = new AIContext();

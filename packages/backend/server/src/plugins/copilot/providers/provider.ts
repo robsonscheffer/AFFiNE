@@ -9,7 +9,7 @@ import {
   CopilotProviderNotSupported,
   OnEvent,
 } from '../../../base';
-import { DocReader } from '../../../core/doc';
+import { DocReader, DocWriter } from '../../../core/doc';
 import { AccessController } from '../../../core/permission';
 import { Models } from '../../../models';
 import { IndexerService } from '../../indexer';
@@ -19,16 +19,22 @@ import {
   buildBlobContentGetter,
   buildContentGetter,
   buildDocContentGetter,
+  buildDocCreateHandler,
   buildDocKeywordSearchGetter,
   buildDocSearchGetter,
+  buildDocUpdateHandler,
+  buildDocUpdateMetaHandler,
   createBlobReadTool,
   createCodeArtifactTool,
   createConversationSummaryTool,
   createDocComposeTool,
+  createDocCreateTool,
   createDocEditTool,
   createDocKeywordSearchTool,
   createDocReadTool,
   createDocSemanticSearchTool,
+  createDocUpdateMetaTool,
+  createDocUpdateTool,
   createExaCrawlTool,
   createExaSearchTool,
   createSectionEditTool,
@@ -56,10 +62,15 @@ import {
 export abstract class CopilotProvider<C = any> {
   protected readonly logger = new Logger(this.constructor.name);
   protected readonly MAX_STEPS = 20;
-  protected onlineModelList: string[] = [];
+  protected _onlineModelList: string[] = [];
   abstract readonly type: CopilotProviderType;
   abstract readonly models: CopilotProviderModel[];
   abstract configured(): boolean;
+
+  /** Public getter for online models (dynamically loaded from provider API) */
+  get onlineModelList(): string[] {
+    return this._onlineModelList;
+  }
 
   @Inject() protected readonly AFFiNEConfig!: Config;
   @Inject() protected readonly factory!: CopilotProviderFactory;
@@ -106,15 +117,23 @@ export abstract class CopilotProvider<C = any> {
         inputTypes.every(type => cap.input.includes(type)));
 
     if (modelId) {
+      // 1. Exact match
       const hasOnlineModel = this.onlineModelList.includes(modelId);
+      if (hasOnlineModel) return { id: modelId, capabilities: [] };
+
+      // 2. Suffix match (ignore prefix like "gemini/")
+      const matchedOnlineModel = this.onlineModelList.find(
+        m => modelId.endsWith(m) || m.endsWith(modelId)
+      );
+      if (matchedOnlineModel) {
+        return { id: matchedOnlineModel, capabilities: [] };
+      }
 
       const model = this.models.find(
         m => m.id === modelId && m.capabilities.some(matcher)
       );
 
       if (model) return model;
-      // allow online model without capabilities check
-      if (hasOnlineModel) return { id: modelId, capabilities: [] };
       return undefined;
     }
     if (!outputType) return undefined;
@@ -163,6 +182,7 @@ export abstract class CopilotProvider<C = any> {
         strict: false,
       });
       const docReader = this.moduleRef.get(DocReader, { strict: false });
+      const docWriter = this.moduleRef.get(DocWriter, { strict: false });
       const models = this.moduleRef.get(Models, { strict: false });
       const prompt = this.moduleRef.get(PromptService, {
         strict: false,
@@ -175,6 +195,12 @@ export abstract class CopilotProvider<C = any> {
           if (toolDef[1]) {
             tools[toolDef[0]] = toolDef[1];
           }
+          continue;
+        }
+        if (
+          !(env.dev || env.namespaces.canary) &&
+          ['docCreate', 'docUpdate', 'docUpdateMeta'].includes(tool)
+        ) {
           continue;
         }
         switch (tool) {
@@ -242,6 +268,27 @@ export abstract class CopilotProvider<C = any> {
           case 'docRead': {
             const getDoc = buildDocContentGetter(ac, docReader, models);
             tools.doc_read = createDocReadTool(getDoc.bind(null, options));
+            break;
+          }
+          case 'docCreate': {
+            const createDoc = buildDocCreateHandler(ac, docWriter);
+            tools.doc_create = createDocCreateTool(
+              createDoc.bind(null, options)
+            );
+            break;
+          }
+          case 'docUpdate': {
+            const updateDoc = buildDocUpdateHandler(ac, docWriter);
+            tools.doc_update = createDocUpdateTool(
+              updateDoc.bind(null, options)
+            );
+            break;
+          }
+          case 'docUpdateMeta': {
+            const updateDocMeta = buildDocUpdateMetaHandler(ac, docWriter);
+            tools.doc_update_meta = createDocUpdateMetaTool(
+              updateDocMeta.bind(null, options)
+            );
             break;
           }
           case 'webSearch': {

@@ -53,10 +53,19 @@ export class CopilotProviderFactory {
         continue;
       }
 
-      if (await provider.match({ modelId })) {
+      this.logger.debug(`Checking provider ${type} for match...`);
+      const isMatched = await provider.match({ modelId });
+      this.logger.debug(`Provider ${type} match result: ${isMatched}`);
+
+      if (isMatched) {
         candidate = provider;
         this.logger.debug(`Copilot provider candidate found: ${type}`);
+        break;
       }
+    }
+
+    if (!candidate) {
+      this.logger.warn(`No copilot provider found for model: ${modelId}`);
     }
 
     return candidate;
@@ -74,5 +83,22 @@ export class CopilotProviderFactory {
     if (this.#providers.size === 0) {
       this.server.disableFeature(ServerFeature.Copilot);
     }
+  }
+
+  /**
+   * Get all available models from all registered providers.
+   * Only includes dynamically loaded online models for enterprise-grade single source of truth.
+   */
+  getAvailableModels(): string[] {
+    const models: string[] = [];
+    for (const [, provider] of this.#providers.entries()) {
+      if (provider.configured()) {
+        // Only add dynamically loaded models from onlineModelList
+        // Do NOT add hardcoded models - use single source of truth
+        models.push(...provider.onlineModelList);
+      }
+    }
+    // Deduplicate
+    return [...new Set(models)];
   }
 }

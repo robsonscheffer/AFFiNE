@@ -46,6 +46,7 @@ jobs:
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           PERFSEE_TOKEN: ${{ secrets.PERFSEE_TOKEN }}
           MIXPANEL_TOKEN: ${{ secrets.MIXPANEL_TOKEN }}
+          GA4_MEASUREMENT_ID: ${{ secrets.GA4_MEASUREMENT_ID }}
       - name: Upload web artifact
         uses: actions/upload-artifact@v4
         with:
@@ -79,6 +80,7 @@ jobs:
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           PERFSEE_TOKEN: ${{ secrets.PERFSEE_TOKEN }}
           MIXPANEL_TOKEN: ${{ secrets.MIXPANEL_TOKEN }}
+          GA4_MEASUREMENT_ID: ${{ secrets.GA4_MEASUREMENT_ID }}
       - name: Upload admin artifact
         uses: actions/upload-artifact@v4
         with:
@@ -112,6 +114,7 @@ jobs:
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           PERFSEE_TOKEN: ${{ secrets.PERFSEE_TOKEN }}
           MIXPANEL_TOKEN: ${{ secrets.MIXPANEL_TOKEN }}
+          GA4_MEASUREMENT_ID: ${{ secrets.GA4_MEASUREMENT_ID }}
       - name: Upload mobile artifact
         uses: actions/upload-artifact@v4
         with:
@@ -266,6 +269,10 @@ jobs:
         with:
           app-version: ${{ inputs.app-version }}
 
+      - name: Set lowercase image name
+        id: image
+        run: echo "IMAGE_NAME=${GITHUB_REPOSITORY,,}" >> $GITHUB_OUTPUT
+
       - name: Build front Dockerfile
         uses: docker/build-push-action@v6
         with:
@@ -275,7 +282,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           provenance: true
           file: .github/deployment/front/Dockerfile
-          tags: ghcr.io/toeverything/affine-front:${{inputs.build-type}}-${{ inputs.git-short-hash }}
+          tags: ghcr.io/${{ steps.image.outputs.IMAGE_NAME }}-front:${{inputs.build-type}}-${{ inputs.git-short-hash }}
 
       - name: Build graphql Dockerfile
         uses: docker/build-push-action@v6
@@ -286,4 +293,4 @@ jobs:
           platforms: linux/amd64,linux/arm64,linux/arm/v7
           provenance: true
           file: .github/deployment/node/Dockerfile
-          tags: ghcr.io/toeverything/affine:${{inputs.build-type}}-${{ inputs.git-short-hash }}
+          tags: ghcr.io/${{ steps.image.outputs.IMAGE_NAME }}:${{inputs.build-type}}-${{ inputs.git-short-hash }}

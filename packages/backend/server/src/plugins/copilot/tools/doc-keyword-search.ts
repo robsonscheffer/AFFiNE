@@ -17,6 +17,7 @@ export const buildDocKeywordSearchGetter = (
     const canAccess = await ac
       .user(options.user)
       .workspace(options.workspace)
+      .allowLocal()
       .can('Workspace.Read');
     if (!canAccess) return undefined;
     const docs = await indexerService.searchDocsByKeyword(
@@ -28,6 +29,7 @@ export const buildDocKeywordSearchGetter = (
     const readableDocs = await ac
       .user(options.user)
       .workspace(options.workspace)
+      .allowLocal()
       .docs(docs, 'Doc.Read');
     return readableDocs;
   };

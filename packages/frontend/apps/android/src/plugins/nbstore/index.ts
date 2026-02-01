@@ -4,7 +4,9 @@ import {
 } from '@affine/core/modules/workspace-engine';
 import {
   type BlobRecord,
+  type CrawlResult,
   type DocClock,
+  type DocIndexedClock,
   type DocRecord,
   type ListedBlobRecord,
   parseUniversalId,
@@ -321,7 +323,7 @@ export const NbStoreNativeDBApis: NativeDBApis = {
       peer,
       blobId,
     });
-    return result?.uploadedAt ? new Date(result.uploadedAt) : null;
+    return result.uploadedAt ? new Date(result.uploadedAt) : null;
   },
   setBlobUploadedAt: async function (
     id: string,
@@ -336,8 +338,11 @@ export const NbStoreNativeDBApis: NativeDBApis = {
       uploadedAt: uploadedAt ? uploadedAt.getTime() : null,
     });
   },
-  crawlDocData: async function (id: string, docId: string) {
-    return NbStore.crawlDocData({ id, docId });
+  crawlDocData: async function (
+    id: string,
+    docId: string
+  ): Promise<CrawlResult> {
+    return await NbStore.crawlDocData({ id, docId });
   },
   ftsAddDocument: async function (
     id: string,
@@ -370,11 +375,12 @@ export const NbStoreNativeDBApis: NativeDBApis = {
     indexName: string,
     query: string
   ): Promise<{ id: string; score: number; terms: Array<string> }[]> {
-    return await NbStore.ftsSearch({
+    const { results } = await NbStore.ftsSearch({
       id,
       indexName,
       query,
     });
+    return results ?? [];
   },
   ftsGetDocument: async function (
     id: string,
@@ -394,12 +400,13 @@ export const NbStoreNativeDBApis: NativeDBApis = {
     docId: string,
     query: string
   ): Promise<{ start: number; end: number }[]> {
-    return await NbStore.ftsGetMatches({
+    const { matches } = await NbStore.ftsGetMatches({
       id,
       indexName,
       docId,
       query,
     });
+    return matches ?? [];
   },
   ftsFlushIndex: async function (id: string): Promise<void> {
     await NbStore.ftsFlushIndex({
@@ -407,6 +414,31 @@ export const NbStoreNativeDBApis: NativeDBApis = {
     });
   },
   ftsIndexVersion: function (): Promise<number> {
-    return NbStore.ftsIndexVersion();
+    return NbStore.ftsIndexVersion().then(res => res.indexVersion);
+  },
+  getDocIndexedClock: function (
+    id: string,
+    docId: string
+  ): Promise<DocIndexedClock | null> {
+    return NbStore.getDocIndexedClock({ id, docId });
+  },
+  setDocIndexedClock: function (
+    id: string,
+    docId: string,
+    indexedClock: Date,
+    indexerVersion: number
+  ): Promise<void> {
+    return NbStore.setDocIndexedClock({
+      id,
+      docId,
+      indexedClock: indexedClock.getTime(),
+      indexerVersion,
+    });
+  },
+  clearDocIndexedClock: function (id: string, docId: string): Promise<void> {
+    return NbStore.clearDocIndexedClock({
+      id,
+      docId,
+    });
   },
 };

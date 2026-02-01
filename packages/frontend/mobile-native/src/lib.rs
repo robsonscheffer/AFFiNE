@@ -1,5 +1,5 @@
 use affine_common::hashcash::Stamp;
-use affine_nbstore::pool::SqliteDocStoragePool;
+use affine_nbstore::{Data, pool::SqliteDocStoragePool};
 
 #[derive(uniffi::Error, thiserror::Error, Debug)]
 pub enum UniffiError {
@@ -50,9 +50,11 @@ impl TryFrom<DocRecord> for affine_nbstore::DocRecord {
   fn try_from(record: DocRecord) -> Result<Self> {
     Ok(Self {
       doc_id: record.doc_id,
-      bin: base64_simd::STANDARD
-        .decode_to_vec(record.bin)
-        .map_err(|e| UniffiError::Base64DecodingError(e.to_string()))?,
+      bin: Into::<Data>::into(
+        base64_simd::STANDARD
+          .decode_to_vec(record.bin)
+          .map_err(|e| UniffiError::Base64DecodingError(e.to_string()))?,
+      ),
       timestamp: chrono::DateTime::<chrono::Utc>::from_timestamp_millis(record.timestamp)
         .ok_or(UniffiError::TimestampDecodingError)?
         .naive_utc(),
@@ -87,8 +89,54 @@ impl TryFrom<DocUpdate> for affine_nbstore::DocUpdate {
       timestamp: chrono::DateTime::<chrono::Utc>::from_timestamp_millis(update.timestamp)
         .ok_or(UniffiError::TimestampDecodingError)?
         .naive_utc(),
-      bin: update.bin.into(),
+      bin: Into::<Data>::into(
+        base64_simd::STANDARD
+          .decode_to_vec(update.bin)
+          .map_err(|e| UniffiError::Base64DecodingError(e.to_string()))?,
+      ),
     })
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn doc_update_roundtrip_base64() {
+    let timestamp = chrono::DateTime::<chrono::Utc>::from_timestamp_millis(1_700_000_000_000)
+      .unwrap()
+      .naive_utc();
+    let original = affine_nbstore::DocUpdate {
+      doc_id: "doc-1".to_string(),
+      timestamp,
+      bin: vec![1, 2, 3, 4, 5],
+    };
+
+    let encoded: DocUpdate = original.into();
+    let decoded = affine_nbstore::DocUpdate::try_from(encoded).unwrap();
+
+    assert_eq!(decoded.doc_id, "doc-1");
+    assert_eq!(decoded.timestamp, timestamp);
+    assert_eq!(decoded.bin, vec![1, 2, 3, 4, 5]);
+  }
+
+  #[test]
+  fn doc_update_rejects_invalid_base64() {
+    let update = DocUpdate {
+      doc_id: "doc-2".to_string(),
+      timestamp: 0,
+      bin: "not-base64!!".to_string(),
+    };
+
+    let err = match affine_nbstore::DocUpdate::try_from(update) {
+      Ok(_) => panic!("expected base64 decode error"),
+      Err(err) => err,
+    };
+    match err {
+      UniffiError::Base64DecodingError(_) => {}
+      other => panic!("unexpected error: {other:?}"),
+    }
   }
 }
 
@@ -156,9 +204,11 @@ impl TryFrom<SetBlob> for affine_nbstore::SetBlob {
   fn try_from(blob: SetBlob) -> Result<Self> {
     Ok(Self {
       key: blob.key,
-      data: base64_simd::STANDARD
-        .decode_to_vec(blob.data)
-        .map_err(|e| UniffiError::Base64DecodingError(e.to_string()))?,
+      data: Into::<Data>::into(
+        base64_simd::STANDARD
+          .decode_to_vec(blob.data)
+          .map_err(|e| UniffiError::Base64DecodingError(e.to_string()))?,
+      ),
       mime: blob.mime,
     })
   }
@@ -229,6 +279,38 @@ impl From<affine_nbstore::indexer::NativeCrawlResult> for CrawlResult {
   }
 }
 
+#[derive(uniffi::Record)]
+pub struct SearchHit {
+  pub id: String,
+  pub score: f64,
+  pub terms: Vec<String>,
+}
+
+impl From<affine_nbstore::indexer::NativeSearchHit> for SearchHit {
+  fn from(value: affine_nbstore::indexer::NativeSearchHit) -> Self {
+    Self {
+      id: value.id,
+      score: value.score,
+      terms: value.terms,
+    }
+  }
+}
+
+#[derive(uniffi::Record)]
+pub struct MatchRange {
+  pub start: u32,
+  pub end: u32,
+}
+
+impl From<affine_nbstore::indexer::NativeMatch> for MatchRange {
+  fn from(value: affine_nbstore::indexer::NativeMatch) -> Self {
+    Self {
+      start: value.start,
+      end: value.end,
+    }
+  }
+}
+
 #[derive(uniffi::Object)]
 pub struct DocStoragePool {
   inner: SqliteDocStoragePool,
@@ -254,22 +336,10 @@ impl DocStoragePool {
   }
 
   pub async fn set_space_id(&self, universal_id: String, space_id: String) -> Result<()> {
-    Ok(
-      self
-        .inner
-        .get(universal_id)
-        .await?
-        .set_space_id(space_id)
-        .await?,
-    )
+    Ok(self.inner.get(universal_id).await?.set_space_id(space_id).await?)
   }
 
-  pub async fn push_update(
-    &self,
-    universal_id: String,
-    doc_id: String,
-    update: String,
-  ) -> Result<i64> {
+  pub async fn push_update(&self, universal_id: String, doc_id: String, update: String) -> Result<i64> {
     Ok(
       self
         .inner
@@ -287,11 +357,7 @@ impl DocStoragePool {
     )
   }
 
-  pub async fn get_doc_snapshot(
-    &self,
-    universal_id: String,
-    doc_id: String,
-  ) -> Result<Option<DocRecord>> {
+  pub async fn get_doc_snapshot(&self, universal_id: String, doc_id: String) -> Result<Option<DocRecord>> {
     Ok(
       self
         .inner
@@ -314,11 +380,7 @@ impl DocStoragePool {
     )
   }
 
-  pub async fn get_doc_updates(
-    &self,
-    universal_id: String,
-    doc_id: String,
-  ) -> Result<Vec<DocUpdate>> {
+  pub async fn get_doc_updates(&self, universal_id: String, doc_id: String) -> Result<Vec<DocUpdate>> {
     Ok(
       self
         .inner
@@ -332,12 +394,7 @@ impl DocStoragePool {
     )
   }
 
-  pub async fn mark_updates_merged(
-    &self,
-    universal_id: String,
-    doc_id: String,
-    updates: Vec<i64>,
-  ) -> Result<u32> {
+  pub async fn mark_updates_merged(&self, universal_id: String, doc_id: String, updates: Vec<i64>) -> Result<u32> {
     Ok(
       self
         .inner
@@ -359,21 +416,10 @@ impl DocStoragePool {
   }
 
   pub async fn delete_doc(&self, universal_id: String, doc_id: String) -> Result<()> {
-    Ok(
-      self
-        .inner
-        .get(universal_id)
-        .await?
-        .delete_doc(doc_id)
-        .await?,
-    )
+    Ok(self.inner.get(universal_id).await?.delete_doc(doc_id).await?)
   }
 
-  pub async fn get_doc_clocks(
-    &self,
-    universal_id: String,
-    after: Option<i64>,
-  ) -> Result<Vec<DocClock>> {
+  pub async fn get_doc_clocks(&self, universal_id: String, after: Option<i64>) -> Result<Vec<DocClock>> {
     Ok(
       self
         .inner
@@ -395,11 +441,7 @@ impl DocStoragePool {
     )
   }
 
-  pub async fn get_doc_clock(
-    &self,
-    universal_id: String,
-    doc_id: String,
-  ) -> Result<Option<DocClock>> {
+  pub async fn get_doc_clock(&self, universal_id: String, doc_id: String) -> Result<Option<DocClock>> {
     Ok(
       self
         .inner
@@ -412,34 +454,14 @@ impl DocStoragePool {
   }
 
   pub async fn get_blob(&self, universal_id: String, key: String) -> Result<Option<Blob>> {
-    Ok(
-      self
-        .inner
-        .get(universal_id)
-        .await?
-        .get_blob(key)
-        .await?
-        .map(Into::into),
-    )
+    Ok(self.inner.get(universal_id).await?.get_blob(key).await?.map(Into::into))
   }
 
   pub async fn set_blob(&self, universal_id: String, blob: SetBlob) -> Result<()> {
-    Ok(
-      self
-        .inner
-        .get(universal_id)
-        .await?
-        .set_blob(blob.try_into()?)
-        .await?,
-    )
+    Ok(self.inner.get(universal_id).await?.set_blob(blob.try_into()?).await?)
   }
 
-  pub async fn delete_blob(
-    &self,
-    universal_id: String,
-    key: String,
-    permanently: bool,
-  ) -> Result<()> {
+  pub async fn delete_blob(&self, universal_id: String, key: String, permanently: bool) -> Result<()> {
     Ok(
       self
         .inner
@@ -468,11 +490,7 @@ impl DocStoragePool {
     )
   }
 
-  pub async fn get_peer_remote_clocks(
-    &self,
-    universal_id: String,
-    peer: String,
-  ) -> Result<Vec<DocClock>> {
+  pub async fn get_peer_remote_clocks(&self, universal_id: String, peer: String) -> Result<Vec<DocClock>> {
     Ok(
       self
         .inner
@@ -526,11 +544,7 @@ impl DocStoragePool {
     )
   }
 
-  pub async fn get_peer_pulled_remote_clocks(
-    &self,
-    universal_id: String,
-    peer: String,
-  ) -> Result<Vec<DocClock>> {
+  pub async fn get_peer_pulled_remote_clocks(&self, universal_id: String, peer: String) -> Result<Vec<DocClock>> {
     Ok(
       self
         .inner
@@ -601,11 +615,7 @@ impl DocStoragePool {
     )
   }
 
-  pub async fn get_peer_pushed_clocks(
-    &self,
-    universal_id: String,
-    peer: String,
-  ) -> Result<Vec<DocClock>> {
+  pub async fn get_peer_pushed_clocks(&self, universal_id: String, peer: String) -> Result<Vec<DocClock>> {
     Ok(
       self
         .inner
@@ -673,12 +683,7 @@ impl DocStoragePool {
     )
   }
 
-  pub async fn get_blob_uploaded_at(
-    &self,
-    universal_id: String,
-    peer: String,
-    blob_id: String,
-  ) -> Result<Option<i64>> {
+  pub async fn get_blob_uploaded_at(&self, universal_id: String, peer: String, blob_id: String) -> Result<Option<i64>> {
     Ok(
       self
         .inner
@@ -698,5 +703,91 @@ impl DocStoragePool {
       .crawl_doc_data(&doc_id)
       .await?;
     Ok(result.into())
+  }
+
+  pub async fn fts_add_document(
+    &self,
+    universal_id: String,
+    index_name: String,
+    doc_id: String,
+    text: String,
+    index: bool,
+  ) -> Result<()> {
+    self
+      .inner
+      .get(universal_id)
+      .await?
+      .fts_add(&index_name, &doc_id, &text, index)
+      .await?;
+    Ok(())
+  }
+
+  pub async fn fts_delete_document(&self, universal_id: String, index_name: String, doc_id: String) -> Result<()> {
+    self
+      .inner
+      .get(universal_id)
+      .await?
+      .fts_delete(&index_name, &doc_id)
+      .await?;
+    Ok(())
+  }
+
+  pub async fn fts_get_document(
+    &self,
+    universal_id: String,
+    index_name: String,
+    doc_id: String,
+  ) -> Result<Option<String>> {
+    Ok(
+      self
+        .inner
+        .get(universal_id)
+        .await?
+        .fts_get(&index_name, &doc_id)
+        .await?,
+    )
+  }
+
+  pub async fn fts_search(&self, universal_id: String, index_name: String, query: String) -> Result<Vec<SearchHit>> {
+    Ok(
+      self
+        .inner
+        .get(universal_id)
+        .await?
+        .fts_search(&index_name, &query)
+        .await?
+        .into_iter()
+        .map(Into::into)
+        .collect(),
+    )
+  }
+
+  pub async fn fts_get_matches(
+    &self,
+    universal_id: String,
+    index_name: String,
+    doc_id: String,
+    query: String,
+  ) -> Result<Vec<MatchRange>> {
+    Ok(
+      self
+        .inner
+        .get(universal_id)
+        .await?
+        .fts_get_matches(&index_name, &doc_id, &query)
+        .await?
+        .into_iter()
+        .map(Into::into)
+        .collect(),
+    )
+  }
+
+  pub async fn fts_flush_index(&self, universal_id: String) -> Result<()> {
+    self.inner.get(universal_id).await?.flush_index().await?;
+    Ok(())
+  }
+
+  pub async fn fts_index_version(&self) -> Result<u32> {
+    Ok(affine_nbstore::storage::SqliteDocStorage::index_version())
   }
 }

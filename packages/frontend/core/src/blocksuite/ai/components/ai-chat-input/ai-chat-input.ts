@@ -33,11 +33,7 @@ import {
   isChatMessage,
   StreamObjectSchema,
 } from '../ai-chat-messages';
-import type {
-  AIChatInputContext,
-  AINetworkSearchConfig,
-  AIReasoningConfig,
-} from './type';
+import type { AIChatInputContext, AIReasoningConfig } from './type';
 
 function getFirstTwoLines(text: string) {
   const lines = text.split('\n');
@@ -351,9 +347,6 @@ export class AIChatInput extends SignalWatcher(
   accessor addChip!: (chip: ChatChip, silent?: boolean) => Promise<void>;
 
   @property({ attribute: false })
-  accessor networkSearchConfig!: AINetworkSearchConfig;
-
-  @property({ attribute: false })
   accessor reasoningConfig!: AIReasoningConfig;
 
   @property({ attribute: false })
@@ -400,13 +393,6 @@ export class AIChatInput extends SignalWatcher(
 
   @property({ attribute: false })
   accessor portalContainer: HTMLElement | null = null;
-
-  private get _isNetworkActive() {
-    return (
-      !!this.networkSearchConfig.visible.value &&
-      !!this.networkSearchConfig.enabled.value
-    );
-  }
 
   private get _isReasoningActive() {
     return !!this.reasoningConfig.enabled.value;
@@ -536,9 +522,6 @@ export class AIChatInput extends SignalWatcher(
           .session=${this.session}
           .extendedThinking=${this._isReasoningActive}
           .onExtendedThinkingChange=${this._toggleReasoning}
-          .networkSearchVisible=${!!this.networkSearchConfig.visible.value}
-          .isNetworkActive=${this._isNetworkActive}
-          .onNetworkActiveChange=${this._toggleNetworkSearch}
           .serverService=${this.serverService}
           .toolsConfigService=${this.aiToolsConfigService}
           .notificationService=${this.notificationService}
@@ -632,10 +615,6 @@ export class AIChatInput extends SignalWatcher(
     this.chatContextValue.abortController?.abort();
     this.updateContext({ status: 'success' });
     reportResponse('aborted:stop');
-  };
-
-  private readonly _toggleNetworkSearch = (isNetworkActive: boolean) => {
-    this.networkSearchConfig.setEnabled(isNetworkActive);
   };
 
   private readonly _toggleReasoning = (extendedThinking: boolean) => {
@@ -732,7 +711,6 @@ export class AIChatInput extends SignalWatcher(
         isRootSession: this.isRootSession,
         where: this.trackOptions?.where,
         control: this.trackOptions?.control,
-        webSearch: this._isNetworkActive,
         reasoning: this._isReasoningActive,
         toolsConfig: this.aiToolsConfigService.config.value,
         modelId,
@@ -743,15 +721,30 @@ export class AIChatInput extends SignalWatcher(
         const last = messages.at(-1);
         if (last && isChatMessage(last)) {
           try {
-            const parsed = StreamObjectSchema.parse(JSON.parse(text));
-            const streamObjects = mergeStreamObjects([
-              ...(last.streamObjects ?? []),
-              parsed,
-            ]);
-            messages[messages.length - 1] = {
-              ...last,
-              streamObjects,
-            };
+            const jsonData = JSON.parse(text);
+            const parsed = StreamObjectSchema.safeParse(jsonData);
+            if (parsed.success) {
+              const streamObjects = mergeStreamObjects([
+                ...(last.streamObjects ?? []),
+                parsed.data,
+              ]);
+              messages[messages.length - 1] = {
+                ...last,
+                streamObjects,
+              };
+            } else if (typeof jsonData === 'object' && 'text' in jsonData) {
+              // Handle LiteLLM/OpenAI compatible {"text": "..."} format
+              messages[messages.length - 1] = {
+                ...last,
+                content: last.content + jsonData.text,
+              };
+            } else {
+              // Unknown JSON format, append as-is
+              messages[messages.length - 1] = {
+                ...last,
+                content: last.content + text,
+              };
+            }
           } catch {
             messages[messages.length - 1] = {
               ...last,

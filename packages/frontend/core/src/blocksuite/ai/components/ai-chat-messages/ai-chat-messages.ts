@@ -19,15 +19,12 @@ import { repeat } from 'lit/directives/repeat.js';
 import { debounce } from 'lodash-es';
 
 import { AffineIcon } from '../../_common/icons';
-import { AIPreloadConfig } from '../../chat-panel/preload-config';
 import { type AIError, AIProvider, UnauthorizedError } from '../../provider';
 import { mergeStreamObjects } from '../../utils/stream-objects';
 import type { DocDisplayConfig } from '../ai-chat-chips';
 import { type ChatContextValue } from '../ai-chat-content/type';
-import type {
-  AINetworkSearchConfig,
-  AIReasoningConfig,
-} from '../ai-chat-input';
+import type { AIReasoningConfig } from '../ai-chat-input';
+import { AIPreloadConfig } from './preload-config';
 import {
   type HistoryMessage,
   isChatAction,
@@ -197,9 +194,6 @@ export class AIChatMessages extends WithDisposable(ShadowlessElement) {
   accessor notificationService!: NotificationService;
 
   @property({ attribute: false })
-  accessor networkSearchConfig!: AINetworkSearchConfig;
-
-  @property({ attribute: false })
   accessor reasoningConfig!: AIReasoningConfig;
 
   @property({ attribute: false })
@@ -223,13 +217,6 @@ export class AIChatMessages extends WithDisposable(ShadowlessElement) {
     reflect: true,
   })
   accessor testId = 'chat-panel-messages';
-
-  private get _isNetworkActive() {
-    return (
-      !!this.networkSearchConfig.visible.value &&
-      !!this.networkSearchConfig.enabled.value
-    );
-  }
 
   private get _isReasoningActive() {
     return !!this.reasoningConfig.enabled.value;
@@ -470,7 +457,6 @@ export class AIChatMessages extends WithDisposable(ShadowlessElement) {
         control: 'chat-send',
         isRootSession: true,
         reasoning: this._isReasoningActive,
-        webSearch: this._isNetworkActive,
         toolsConfig: this.aiToolsConfigService.config.value,
       });
 
@@ -479,15 +465,30 @@ export class AIChatMessages extends WithDisposable(ShadowlessElement) {
         const last = messages.at(-1);
         if (last && isChatMessage(last)) {
           try {
-            const parsed = StreamObjectSchema.parse(JSON.parse(text));
-            const streamObjects = mergeStreamObjects([
-              ...(last.streamObjects ?? []),
-              parsed,
-            ]);
-            messages[messages.length - 1] = {
-              ...last,
-              streamObjects,
-            };
+            const jsonData = JSON.parse(text);
+            const parsed = StreamObjectSchema.safeParse(jsonData);
+            if (parsed.success) {
+              const streamObjects = mergeStreamObjects([
+                ...(last.streamObjects ?? []),
+                parsed.data,
+              ]);
+              messages[messages.length - 1] = {
+                ...last,
+                streamObjects,
+              };
+            } else if (typeof jsonData === 'object' && 'text' in jsonData) {
+              // Handle LiteLLM/OpenAI compatible {"text": "..."} format
+              messages[messages.length - 1] = {
+                ...last,
+                content: last.content + jsonData.text,
+              };
+            } else {
+              // Unknown JSON format, append as-is
+              messages[messages.length - 1] = {
+                ...last,
+                content: last.content + text,
+              };
+            }
           } catch {
             messages[messages.length - 1] = {
               ...last,

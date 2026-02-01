@@ -24,9 +24,9 @@ import {
   DoneIcon,
   LockIcon,
   ThinkingIcon,
-  WebIcon,
 } from '@blocksuite/icons/lit';
 import { ShadowlessElement } from '@blocksuite/std';
+import { autoPlacement, offset, shift } from '@floating-ui/dom';
 import { computed } from '@preact/signals-core';
 import { css, html } from 'lit';
 import { property } from 'lit/decorators.js';
@@ -85,6 +85,11 @@ export class ChatInputPreference extends SignalWatcher(
       line-height: 20px;
       margin-right: 40px;
     }
+    /* Ensure model submenu body is scrollable for long model lists */
+    affine-menu .affine-menu-body {
+      overflow-y: auto;
+      max-height: 400px;
+    }
   `;
 
   @property({ attribute: false })
@@ -100,19 +105,6 @@ export class ChatInputPreference extends SignalWatcher(
     | ((extendedThinking: boolean) => void)
     | undefined;
   // --------- extended thinking props end ---------
-
-  // --------- search props start ---------
-  @property({ attribute: false })
-  accessor networkSearchVisible: boolean = false;
-
-  @property({ attribute: false })
-  accessor isNetworkActive: boolean = false;
-
-  @property({ attribute: false })
-  accessor onNetworkActiveChange:
-    | ((isNetworkActive: boolean) => void)
-    | undefined;
-  // --------- search props end ---------
 
   @property({ attribute: false })
   accessor serverService!: ServerService;
@@ -157,14 +149,28 @@ export class ChatInputPreference extends SignalWatcher(
         postfix: html`
           <span class="ai-active-model-name"> ${this.model.value?.name} </span>
         `,
+        // Use custom middleware with smaller offset (4px) to prevent mouse-out issues
+        // when moving from trigger to submenu options
+        middleware: [
+          autoPlacement({
+            allowedPlacements: [
+              'right-start',
+              'right-end',
+              'left-start',
+              'left-end',
+            ],
+          }),
+          offset({ mainAxis: 4, crossAxis: 0 }),
+          shift({ crossAxis: true }),
+        ],
         options: {
           items: this.aiModelService.models.value.map(model => {
             const isSelected = model.id === this.model.value?.id;
             const isSelfHosted =
-              this.serverService.server.config$.value?.type ===
+              this.serverService?.server?.config$.value?.type ===
               ServerDeploymentType.Selfhosted;
             const status =
-              this.subscriptionService.subscription.ai$.value?.status;
+              this.subscriptionService?.subscription?.ai$.value?.status;
             const isSubscribed = status === SubscriptionStatus.Active;
             return menu.action({
               name: model.category,
@@ -206,31 +212,21 @@ export class ChatInputPreference extends SignalWatcher(
       })
     );
 
-    if (this.networkSearchVisible) {
-      searchItems.push(
-        menu.toggleSwitch({
-          name: 'Web Search',
-          prefix: WebIcon(),
-          on: this.isNetworkActive,
-          onChange: (value: boolean) => this.onNetworkActiveChange?.(value),
-          class: { 'preference-action': true },
-          testId: 'chat-network-search',
-        }),
-        menu.toggleSwitch({
-          name: 'Workspace All Docs',
-          prefix: CloudWorkspaceIcon(),
-          on:
-            !!this.toolsConfigService.config.value.searchWorkspace &&
-            !!this.toolsConfigService.config.value.readingDocs,
-          onChange: (value: boolean) =>
-            this.toolsConfigService.setConfig({
-              searchWorkspace: value,
-              readingDocs: value,
-            }),
-          class: { 'preference-action': true },
-        })
-      );
-    }
+    searchItems.push(
+      menu.toggleSwitch({
+        name: 'Workspace All Docs',
+        prefix: CloudWorkspaceIcon(),
+        on:
+          !!this.toolsConfigService.config.value.searchWorkspace &&
+          !!this.toolsConfigService.config.value.readingDocs,
+        onChange: (value: boolean) =>
+          this.toolsConfigService.setConfig({
+            searchWorkspace: value,
+            readingDocs: value,
+          }),
+        class: { 'preference-action': true },
+      })
+    );
 
     popMenu(popupTargetFromElement(element), {
       options: {
