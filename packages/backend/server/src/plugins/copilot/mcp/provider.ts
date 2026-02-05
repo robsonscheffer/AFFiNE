@@ -187,386 +187,40 @@ export class WorkspaceMcpProvider {
       }
     );
 
-    if (env.dev || env.namespaces.canary) {
-      // Write tools - create and update documents
-      server.registerTool(
-        'create_document',
-        {
-          title: 'Create Document',
-          description:
-            'Create a new document in the workspace with the given title and markdown content. Returns the ID of the created document. This tool not support insert or update database block and image yet.',
-          inputSchema: z.object({
-            title: z.string().min(1).describe('The title of the new document'),
-            content: z
-              .string()
-              .describe('The markdown content for the document body'),
-          }),
-        },
-        async ({ title, content }) => {
-          try {
-            await this.ac
-              .user(userId)
-              .workspace(workspaceId)
-              .assert('Workspace.CreateDoc');
-
-            const sanitizedTitle = title.replace(/[\r\n]+/g, ' ').trim();
-            if (!sanitizedTitle) throw new Error('Title cannot be empty');
-            const strippedContent = content.replace(
-              /^[ \t]{0,3}#\s+[^\n]*#*\s*\n*/,
-              ''
-            );
-
-            const result = await this.writer.createDoc(
-              workspaceId,
-              sanitizedTitle,
-              strippedContent,
-              userId
-            );
-
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: JSON.stringify({
-                    success: true,
-                    docId: result.docId,
-                    message: `Document "${title}" created successfully`,
-                  }),
-                },
-              ],
-            } as const;
-          } catch (error) {
-            return {
-              isError: true,
-              content: [
-                {
-                  type: 'text',
-                  text: `Failed to create document: ${error instanceof Error ? error.message : 'Unknown error'}`,
-                },
-              ],
-            };
-          }
-        }
-      );
-
-      server.registerTool(
-        'update_document',
-        {
-          title: 'Update Document',
-          description:
-            'Update an existing document with new markdown content (body only). Uses structural diffing to apply minimal changes, preserving document history and enabling real-time collaboration. This does NOT update the document title. This tool not support insert or update database block and image yet.',
-          inputSchema: z.object({
-            docId: z.string().describe('The ID of the document to update'),
-            content: z
-              .string()
-              .describe(
-                'The complete new markdown content for the document body (do NOT include a title H1)'
-              ),
-          }),
-        },
-        async ({ docId, content }) => {
-          const notFoundError: CallToolResult = {
-            isError: true,
-            content: [
-              { type: 'text', text: `Doc with id ${docId} not found.` },
-            ],
-          };
-
-          const accessible = await this.ac
+    // Write tools - create and update documents
+    server.registerTool(
+      'create_document',
+      {
+        title: 'Create Document',
+        description:
+          'Create a new document in the workspace with the given title and markdown content. Returns the ID of the created document. This tool not support insert or update database block and image yet.',
+        inputSchema: z.object({
+          title: z.string().min(1).describe('The title of the new document'),
+          content: z
+            .string()
+            .describe('The markdown content for the document body'),
+        }),
+      },
+      async ({ title, content }) => {
+        try {
+          await this.ac
             .user(userId)
             .workspace(workspaceId)
-            .doc(docId)
-            .can('Doc.Update');
-          if (!accessible) return notFoundError;
+            .assert('Workspace.CreateDoc');
 
-          try {
-            await this.writer.updateDoc(workspaceId, docId, content, userId);
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: JSON.stringify({
-                    success: true,
-                    docId,
-                    message: `Document updated successfully`,
-                  }),
-                },
-              ],
-            } as const;
-          } catch (error) {
-            return {
-              isError: true,
-              content: [
-                {
-                  type: 'text',
-                  text: `Failed to update document: ${error instanceof Error ? error.message : 'Unknown error'}`,
-                },
-              ],
-            };
-          }
-        }
-      );
+          const sanitizedTitle = title.replace(/[\r\n]+/g, ' ').trim();
+          if (!sanitizedTitle) throw new Error('Title cannot be empty');
+          const strippedContent = content.replace(
+            /^[ \t]{0,3}#\s+[^\n]*#*\s*\n*/,
+            ''
+          );
 
-      server.registerTool(
-        'update_document_meta',
-        {
-          title: 'Update Document Metadata',
-          description: 'Update document metadata (currently title only).',
-          inputSchema: z.object({
-            docId: z.string().describe('The ID of the document to update'),
-            title: z.string().min(1).describe('The new document title'),
-          }),
-        },
-        async ({ docId, title }) => {
-          const notFoundError: CallToolResult = {
-            isError: true,
-            content: [
-              { type: 'text', text: `Doc with id ${docId} not found.` },
-            ],
-          };
-
-          const accessible = await this.ac
-            .user(userId)
-            .workspace(workspaceId)
-            .doc(docId)
-            .can('Doc.Update');
-          if (!accessible) return notFoundError;
-
-          try {
-            const sanitizedTitle = title.replace(/[\r\n]+/g, ' ').trim();
-            if (!sanitizedTitle) throw new Error('Title cannot be empty');
-
-            await this.writer.updateDocMeta(
-              workspaceId,
-              docId,
-              { title: sanitizedTitle },
-              userId
-            );
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: JSON.stringify({
-                    success: true,
-                    docId,
-                    message: `Document title updated successfully`,
-                  }),
-                },
-              ],
-            } as const;
-          } catch (error) {
-            return {
-              isError: true,
-              content: [
-                {
-                  type: 'text',
-                  text: `Failed to update document metadata: ${error instanceof Error ? error.message : 'Unknown error'}`,
-                },
-              ],
-            };
-          }
-        }
-      );
-
-      server.registerTool(
-        'append_content',
-        {
-          title: 'Append Content',
-          description: 'Append text content to the end of a document.',
-          inputSchema: z.object({ docId: z.string(), content: z.string() }),
-        },
-        async ({ docId, content }) => {
-          const accessible = await this.ac
-            .user(userId)
-            .workspace(workspaceId)
-            .doc(docId)
-            .can('Doc.Update');
-          if (!accessible)
-            return {
-              isError: true,
-              content: [
-                {
-                  type: 'text',
-                  text: `Permission denied to write to doc ${docId}.`,
-                },
-              ],
-            };
-
-          const docRecord = await this.storage.getDoc(workspaceId, docId);
-          if (!docRecord)
-            return {
-              isError: true,
-              content: [
-                { type: 'text', text: `Doc with id ${docId} not found.` },
-              ],
-            };
-
-          const doc = new YDoc();
-          applyUpdate(doc, docRecord.bin);
-          const blocks = doc.getMap('blocks');
-          let noteBlockId: string | undefined;
-
-          for (const block of blocks.values()) {
-            const flavour = (block as YMap<any>).get('sys:flavour');
-            if (flavour === 'affine:note')
-              noteBlockId = (block as YMap<any>).get('sys:id');
-          }
-
-          if (!noteBlockId)
-            return {
-              isError: true,
-              content: [
-                {
-                  type: 'text',
-                  text: `Structure error: No note block found in doc ${docId}.`,
-                },
-              ],
-            };
-
-          const newBlockId = randomUUID();
-          const newBlock = new YMap();
-          newBlock.set('sys:id', newBlockId);
-          newBlock.set('sys:flavour', 'affine:paragraph');
-          newBlock.set('prop:type', 'text');
-          newBlock.set('sys:children', new YArray());
-          const text = new YText(content);
-          newBlock.set('prop:text', text);
-
-          blocks.set(newBlockId, newBlock);
-
-          const noteBlock = blocks.get(noteBlockId) as YMap<any>;
-          const children = noteBlock.get('sys:children') as YArray<string>;
-          children.push([newBlockId]);
-
-          const update = encodeStateAsUpdate(doc);
-          await this.storage.pushDocUpdates(workspaceId, docId, [update]);
-
-          return {
-            content: [{ type: 'text', text: 'Content appended successfully.' }],
-          };
-        }
-      );
-
-      server.registerTool(
-        'append_blocks',
-        {
-          title: 'Append Blocks',
-          description:
-            'Append structured blocks to a specific parent block in a document. Supports nested structures.',
-          inputSchema: z.object({
-            docId: z.string(),
-            parentId: z
-              .string()
-              .describe(
-                'The ID of the parent block to append to (e.g. the note block ID)'
-              ),
-            blocks: z.array(
-              z.object({
-                flavour: z.string(),
-                props: z.record(z.any()).optional(),
-                children: z
-                  .array(z.any())
-                  .optional()
-                  .describe('Recursive array of child blocks'),
-              })
-            ),
-          }),
-        },
-        async ({ docId, parentId, blocks: inputBlocks }) => {
-          const accessible = await this.ac
-            .user(userId)
-            .workspace(workspaceId)
-            .doc(docId)
-            .can('Doc.Update');
-          if (!accessible)
-            return {
-              isError: true,
-              content: [
-                {
-                  type: 'text',
-                  text: `Permission denied to update doc ${docId}.`,
-                },
-              ],
-            };
-
-          const docRecord = await this.storage.getDoc(workspaceId, docId);
-          if (!docRecord)
-            return {
-              isError: true,
-              content: [
-                { type: 'text', text: `Doc with id ${docId} not found.` },
-              ],
-            };
-
-          const doc = new YDoc();
-          applyUpdate(doc, docRecord.bin);
-          const yBlocksMap = doc.getMap('blocks');
-
-          if (!yBlocksMap.has(parentId))
-            return {
-              isError: true,
-              content: [
-                {
-                  type: 'text',
-                  text: `Parent block ${parentId} not found in doc ${docId}. Use get_document_blocks to find valid parent IDs.`,
-                },
-              ],
-            };
-
-          const parentBlock = yBlocksMap.get(parentId) as YMap<any>;
-          const parentChildren = parentBlock.get(
-            'sys:children'
-          ) as YArray<string>;
-
-          const createBlock = (blockDef: any): string => {
-            const newId = randomUUID();
-            const newBlock = new YMap();
-            newBlock.set('sys:id', newId);
-            newBlock.set('sys:flavour', blockDef.flavour);
-
-            if (blockDef.props) {
-              for (const [key, value] of Object.entries(blockDef.props)) {
-                if (key === 'text' && typeof value === 'string') {
-                  newBlock.set(`prop:${key}`, new YText(value));
-                } else {
-                  newBlock.set(`prop:${key}`, value);
-                }
-              }
-            }
-
-            const newChildren = new YArray();
-            if (blockDef.children && Array.isArray(blockDef.children)) {
-              for (const childDef of blockDef.children) {
-                const childId = createBlock(childDef);
-                newChildren.push([childId]);
-              }
-            }
-            newBlock.set('sys:children', newChildren);
-            yBlocksMap.set(newId, newBlock);
-            return newId;
-          };
-
-          const addedIds: string[] = [];
-          try {
-            for (const blockDef of inputBlocks) {
-              const newId = createBlock(blockDef);
-              parentChildren.push([newId]);
-              addedIds.push(newId);
-            }
-          } catch (e) {
-            return {
-              isError: true,
-              content: [
-                {
-                  type: 'text',
-                  text: `Failed to create blocks: ${(e as Error).message}`,
-                },
-              ],
-            };
-          }
-
-          const update = encodeStateAsUpdate(doc);
-          await this.storage.pushDocUpdates(workspaceId, docId, [update]);
+          const result = await this.writer.createDoc(
+            workspaceId,
+            sanitizedTitle,
+            strippedContent,
+            userId
+          );
 
           return {
             content: [
@@ -574,51 +228,392 @@ export class WorkspaceMcpProvider {
                 type: 'text',
                 text: JSON.stringify({
                   success: true,
-                  addedBlockIds: addedIds,
+                  docId: result.docId,
+                  message: `Document "${title}" created successfully`,
                 }),
+              },
+            ],
+          } as const;
+        } catch (error) {
+          return {
+            isError: true,
+            content: [
+              {
+                type: 'text',
+                text: `Failed to create document: ${error instanceof Error ? error.message : 'Unknown error'}`,
               },
             ],
           };
         }
-      );
+      }
+    );
 
-      server.registerTool(
-        'delete_document',
-        {
-          title: 'Delete Document',
-          description: 'Permanently delete a document.',
-          inputSchema: z.object({
-            docId: z.string(),
-          }),
-        },
-        async ({ docId }) => {
-          const accessible = await this.ac
-            .user(userId)
-            .workspace(workspaceId)
-            .doc(docId)
-            .can('Doc.Delete');
+    server.registerTool(
+      'update_document',
+      {
+        title: 'Update Document',
+        description:
+          'Update an existing document with new markdown content (body only). Uses structural diffing to apply minimal changes, preserving document history and enabling real-time collaboration. This does NOT update the document title. This tool not support insert or update database block and image yet.',
+        inputSchema: z.object({
+          docId: z.string().describe('The ID of the document to update'),
+          content: z
+            .string()
+            .describe(
+              'The complete new markdown content for the document body (do NOT include a title H1)'
+            ),
+        }),
+      },
+      async ({ docId, content }) => {
+        const notFoundError: CallToolResult = {
+          isError: true,
+          content: [{ type: 'text', text: `Doc with id ${docId} not found.` }],
+        };
 
-          if (!accessible)
-            return {
-              isError: true,
-              content: [
-                { type: 'text', text: 'Permission denied to delete doc.' },
-              ],
-            };
+        const accessible = await this.ac
+          .user(userId)
+          .workspace(workspaceId)
+          .doc(docId)
+          .can('Doc.Update');
+        if (!accessible) return notFoundError;
 
-          await this.storage.deleteDoc(workspaceId, docId);
-
+        try {
+          await this.writer.updateDoc(workspaceId, docId, content, userId);
           return {
             content: [
               {
                 type: 'text',
-                text: JSON.stringify({ id: docId, status: 'deleted' }),
+                text: JSON.stringify({
+                  success: true,
+                  docId,
+                  message: `Document updated successfully`,
+                }),
+              },
+            ],
+          } as const;
+        } catch (error) {
+          return {
+            isError: true,
+            content: [
+              {
+                type: 'text',
+                text: `Failed to update document: ${error instanceof Error ? error.message : 'Unknown error'}`,
               },
             ],
           };
         }
-      );
-    } // End of write tools
+      }
+    );
+
+    server.registerTool(
+      'update_document_meta',
+      {
+        title: 'Update Document Metadata',
+        description: 'Update document metadata (currently title only).',
+        inputSchema: z.object({
+          docId: z.string().describe('The ID of the document to update'),
+          title: z.string().min(1).describe('The new document title'),
+        }),
+      },
+      async ({ docId, title }) => {
+        const notFoundError: CallToolResult = {
+          isError: true,
+          content: [{ type: 'text', text: `Doc with id ${docId} not found.` }],
+        };
+
+        const accessible = await this.ac
+          .user(userId)
+          .workspace(workspaceId)
+          .doc(docId)
+          .can('Doc.Update');
+        if (!accessible) return notFoundError;
+
+        try {
+          const sanitizedTitle = title.replace(/[\r\n]+/g, ' ').trim();
+          if (!sanitizedTitle) throw new Error('Title cannot be empty');
+
+          await this.writer.updateDocMeta(
+            workspaceId,
+            docId,
+            { title: sanitizedTitle },
+            userId
+          );
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  success: true,
+                  docId,
+                  message: `Document title updated successfully`,
+                }),
+              },
+            ],
+          } as const;
+        } catch (error) {
+          return {
+            isError: true,
+            content: [
+              {
+                type: 'text',
+                text: `Failed to update document metadata: ${error instanceof Error ? error.message : 'Unknown error'}`,
+              },
+            ],
+          };
+        }
+      }
+    );
+
+    server.registerTool(
+      'append_content',
+      {
+        title: 'Append Content',
+        description: 'Append text content to the end of a document.',
+        inputSchema: z.object({ docId: z.string(), content: z.string() }),
+      },
+      async ({ docId, content }) => {
+        const accessible = await this.ac
+          .user(userId)
+          .workspace(workspaceId)
+          .doc(docId)
+          .can('Doc.Update');
+        if (!accessible)
+          return {
+            isError: true,
+            content: [
+              {
+                type: 'text',
+                text: `Permission denied to write to doc ${docId}.`,
+              },
+            ],
+          };
+
+        const docRecord = await this.storage.getDoc(workspaceId, docId);
+        if (!docRecord)
+          return {
+            isError: true,
+            content: [
+              { type: 'text', text: `Doc with id ${docId} not found.` },
+            ],
+          };
+
+        const doc = new YDoc();
+        applyUpdate(doc, docRecord.bin);
+        const blocks = doc.getMap('blocks');
+        let noteBlockId: string | undefined;
+
+        for (const block of blocks.values()) {
+          const flavour = (block as YMap<any>).get('sys:flavour');
+          if (flavour === 'affine:note')
+            noteBlockId = (block as YMap<any>).get('sys:id');
+        }
+
+        if (!noteBlockId)
+          return {
+            isError: true,
+            content: [
+              {
+                type: 'text',
+                text: `Structure error: No note block found in doc ${docId}.`,
+              },
+            ],
+          };
+
+        const newBlockId = randomUUID();
+        const newBlock = new YMap();
+        newBlock.set('sys:id', newBlockId);
+        newBlock.set('sys:flavour', 'affine:paragraph');
+        newBlock.set('prop:type', 'text');
+        newBlock.set('sys:children', new YArray());
+        const text = new YText(content);
+        newBlock.set('prop:text', text);
+
+        blocks.set(newBlockId, newBlock);
+
+        const noteBlock = blocks.get(noteBlockId) as YMap<any>;
+        const children = noteBlock.get('sys:children') as YArray<string>;
+        children.push([newBlockId]);
+
+        const update = encodeStateAsUpdate(doc);
+        await this.storage.pushDocUpdates(workspaceId, docId, [update]);
+
+        return {
+          content: [{ type: 'text', text: 'Content appended successfully.' }],
+        };
+      }
+    );
+
+    server.registerTool(
+      'append_blocks',
+      {
+        title: 'Append Blocks',
+        description:
+          'Append structured blocks to a specific parent block in a document. Supports nested structures.',
+        inputSchema: z.object({
+          docId: z.string(),
+          parentId: z
+            .string()
+            .describe(
+              'The ID of the parent block to append to (e.g. the note block ID)'
+            ),
+          blocks: z.array(
+            z.object({
+              flavour: z.string(),
+              props: z.record(z.any()).optional(),
+              children: z
+                .array(z.any())
+                .optional()
+                .describe('Recursive array of child blocks'),
+            })
+          ),
+        }),
+      },
+      async ({ docId, parentId, blocks: inputBlocks }) => {
+        const accessible = await this.ac
+          .user(userId)
+          .workspace(workspaceId)
+          .doc(docId)
+          .can('Doc.Update');
+        if (!accessible)
+          return {
+            isError: true,
+            content: [
+              {
+                type: 'text',
+                text: `Permission denied to update doc ${docId}.`,
+              },
+            ],
+          };
+
+        const docRecord = await this.storage.getDoc(workspaceId, docId);
+        if (!docRecord)
+          return {
+            isError: true,
+            content: [
+              { type: 'text', text: `Doc with id ${docId} not found.` },
+            ],
+          };
+
+        const doc = new YDoc();
+        applyUpdate(doc, docRecord.bin);
+        const yBlocksMap = doc.getMap('blocks');
+
+        if (!yBlocksMap.has(parentId))
+          return {
+            isError: true,
+            content: [
+              {
+                type: 'text',
+                text: `Parent block ${parentId} not found in doc ${docId}. Use get_document_blocks to find valid parent IDs.`,
+              },
+            ],
+          };
+
+        const parentBlock = yBlocksMap.get(parentId) as YMap<any>;
+        const parentChildren = parentBlock.get(
+          'sys:children'
+        ) as YArray<string>;
+
+        const createBlock = (blockDef: any): string => {
+          const newId = randomUUID();
+          const newBlock = new YMap();
+          newBlock.set('sys:id', newId);
+          newBlock.set('sys:flavour', blockDef.flavour);
+
+          if (blockDef.props) {
+            for (const [key, value] of Object.entries(blockDef.props)) {
+              if (key === 'text' && typeof value === 'string') {
+                newBlock.set(`prop:${key}`, new YText(value));
+              } else {
+                newBlock.set(`prop:${key}`, value);
+              }
+            }
+          }
+
+          const newChildren = new YArray();
+          if (blockDef.children && Array.isArray(blockDef.children)) {
+            for (const childDef of blockDef.children) {
+              const childId = createBlock(childDef);
+              newChildren.push([childId]);
+            }
+          }
+          newBlock.set('sys:children', newChildren);
+          yBlocksMap.set(newId, newBlock);
+          return newId;
+        };
+
+        const addedIds: string[] = [];
+        try {
+          for (const blockDef of inputBlocks) {
+            const newId = createBlock(blockDef);
+            parentChildren.push([newId]);
+            addedIds.push(newId);
+          }
+        } catch (e) {
+          return {
+            isError: true,
+            content: [
+              {
+                type: 'text',
+                text: `Failed to create blocks: ${(e as Error).message}`,
+              },
+            ],
+          };
+        }
+
+        const update = encodeStateAsUpdate(doc);
+        await this.storage.pushDocUpdates(workspaceId, docId, [update]);
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                success: true,
+                addedBlockIds: addedIds,
+              }),
+            },
+          ],
+        };
+      }
+    );
+
+    server.registerTool(
+      'delete_document',
+      {
+        title: 'Delete Document',
+        description: 'Permanently delete a document.',
+        inputSchema: z.object({
+          docId: z.string(),
+        }),
+      },
+      async ({ docId }) => {
+        const accessible = await this.ac
+          .user(userId)
+          .workspace(workspaceId)
+          .doc(docId)
+          .can('Doc.Delete');
+
+        if (!accessible)
+          return {
+            isError: true,
+            content: [
+              { type: 'text', text: 'Permission denied to delete doc.' },
+            ],
+          };
+
+        await this.storage.deleteDoc(workspaceId, docId);
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({ id: docId, status: 'deleted' }),
+            },
+          ],
+        };
+      }
+    );
+    // End of write tools
 
     server.registerTool(
       'get_block_schema',
