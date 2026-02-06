@@ -53,6 +53,7 @@ export class DocStorageOptions implements IDocStorageOptions {
           }
         }
       } catch (e) {
+        yoctoResult = null;
         metrics.jwst.counter('codec_fails_counter').add(1);
         this.logger.warn(`jwst apply update failed: ${e}`);
         log = true;
